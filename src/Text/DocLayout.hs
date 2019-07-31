@@ -308,12 +308,13 @@ dLength _          = 0
 
 -- Render a line.
 buildLine :: Line -> Builder
-buildLine (Line ds) = mconcat (map buildD ds)
+buildLine (Line ds) = mconcat (map buildD $ dropTrailingSoftSpaces ds)
  where
    buildD (Text _ t) = B.fromText t
    buildD (VFill _ t) = B.fromText t
    buildD SoftSpace  = B.fromText " "
    buildD _ = mempty
+   dropTrailingSoftSpaces = reverse .  dropWhile isSoftSpace . reverse
 
 single :: D -> Doc
 single = Doc . Seq.singleton
