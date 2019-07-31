@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-
@@ -63,7 +64,6 @@ where
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
 import qualified Data.List.NonEmpty as N
 import Control.Monad (unless)
 import Data.String
@@ -74,6 +74,7 @@ import Control.Monad.State.Strict
 import qualified Data.Text.Lazy.Builder as B
 import Data.Text.Lazy.Builder (Builder)
 import Data.Foldable (toList)
+import Data.String.Conversions (ConvertibleStrings(..), LazyText)
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup (Semigroup)
@@ -138,8 +139,8 @@ data RenderState = RenderState{
   deriving (Show)
 
 -- | Render a Doc with an optional width.
-render :: Maybe Int -> Doc -> Text
-render linelen = TL.toStrict . B.toLazyText . mconcat .
+render :: ConvertibleStrings LazyText a => Maybe Int -> Doc -> a
+render linelen = convertString . B.toLazyText . mconcat .
                  intersperse (B.singleton '\n') .
                  map buildLine .  snd .  buildLines linelen
 
@@ -262,13 +263,16 @@ emitLine = do
        mbLineLength <- gets lineLength
        let pad =
             case (align', mbLineLength, printableWidth) of
-              (AlRight, Just linelen, w) | w > 0
+              (AlLeft, Just linelen, w) | w > 0
                  -> let padw = linelen - w
-                    in  (Text padw (T.replicate padw " ") :)
+                    in  (++ (replicate padw SoftSpace))
               (AlCenter, Just linelen, w) | w > 0
                  -> let padw = (linelen - w) `div` 2
                     in  (Text padw (T.replicate padw " ") :) .
                         (++ (replicate padw SoftSpace))
+              (AlRight, Just linelen, w) | w > 0
+                 -> let padw = linelen - w
+                    in  (Text padw (T.replicate padw " ") :)
               _                           -> id
        return (Line (pad printable) :)
 

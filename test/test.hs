@@ -2,14 +2,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 import Text.DocLayout
--- import Test.Tasty.Golden
 import Test.Tasty
 import Test.Tasty.HUnit
--- import qualified Data.Text as T
--- import qualified Data.Text.IO as T
--- import qualified Data.Text.Encoding as T
--- import System.FilePath
--- import Data.Semigroup ((<>))
+import Data.Text (Text)
 
 main :: IO ()
 main = defaultMain $ testGroup "Tests" tests
@@ -17,31 +12,43 @@ main = defaultMain $ testGroup "Tests" tests
 tests :: [TestTree]
 tests =
   [ testCase "simple text" $
-      render (Just 4) ("hello" <+> "there") @?= "hello\nthere"
+      render (Just 4) ("hello" <+> "there")
+      @?= ("hello\nthere" :: String)
+
   , testCase "nontrivial empty doc" $
-      isEmpty (nest 5 (alignCenter empty)) @?= True
+      isEmpty (nest 5 (alignCenter empty))
+      @?= True
+
   , testCase "nontrivial nonempty doc" $
-      isEmpty (box 1 (text "a")) @?= False
+      isEmpty (box 1 (text "a"))
+      @?= False
+
   , testCase "prefixed with multi paragraphs" $
       render (Just 80) (prefixed ">" ("foo" <> cr <> "bar" <> blankline <> "baz"))
-      @?= ">foo\n>bar\n>\n>baz"
+      @?= (">foo\n>bar\n>\n>baz" :: String)
+
   , testCase "breaking space before empty box" $
       render Nothing ("a" <> space <> box 3 mempty)
-      @?= "a"
+      @?= ("a" :: String)
+
   , testCase "centered" $
       render (Just 10) (alignCenter "hi\nlo")
-      @?= "    hi\n    lo"
+      @?= ("    hi\n    lo" :: String)
+
   , testCase "vfill" $
       render Nothing (vfill "|" <> box 2 (vcat $ replicate 4 "aa") <>
                       vfill "|")
-      @?= "|aa|\n|aa|\n|aa|\n|aa|"
+      @?= ("|aa|\n|aa|\n|aa|\n|aa|" :: Text)
+
   , testCase "aligned" $
       render Nothing ("aa" <> aligned ("bb" $$ "cc") <> "dd")
-      @?= "aabb\n  ccdd"
+      @?= ("aabb\n  ccdd" :: Text)
+
   , testCase "align with box" $
       render Nothing ("aa" <> box 2 ("bb" $$ "cc") <> "dd")
-      @?= "aabbdd\n  cc"
+      @?= ("aabbdd\n  cc" :: Text)
+
   , testCase "centered box" $
       render Nothing ("aa" <> box 4 (alignCenter $ "bb" $$ "cc") <> "dd")
-      @?= "aa bb dd\n   cc"
+      @?= ("aa bb dd\n   cc" :: Text)
   ]
