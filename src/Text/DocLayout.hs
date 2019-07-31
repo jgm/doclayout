@@ -1,34 +1,40 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveTraversable #-}
+{- |
+   Module      : Text.DocLayout
+   Copyright   : Copyright (C) 2010-2019 John MacFarlane
+   License     : BSD 3
+
+   Maintainer  : John MacFarlane <jgm@berkeley.edu>
+   Stability   : alpha
+   Portability : portable
+
 A prettyprinting library for the production of text documents,
 including wrapped text, indentated blocks, and tables.
 -}
 
 module Text.DocLayout (
-       Doc
+       Doc(..)
+     , HasChars(..)
      , render
-     , getDimensions
      , cr
      , blankline
      , blanklines
      , space
      , text
-     , vfill
      , char
-     , box
      , prefixed
      , flush
      , nest
-     , aligned
      , hang
-     , leftAligned
-     , rightAligned
-     , centerAligned
+     , beforeNonBlank
      , nowrap
-     , withColumn
-     , withLineLength
      , afterBreak
      , offset
      , minOffset
@@ -60,418 +66,118 @@ module Text.DocLayout (
      )
 
 where
-import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
+import Prelude
+import Safe (lastMay, initSafe)
 import Control.Monad
-import qualified Data.List.NonEmpty as N
-import Data.Semigroup
-import Data.String
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
-import Data.List (foldl', transpose)
 import Control.Monad.State.Strict
-import qualified Data.Text.Lazy.Builder as B
-import Data.Text.Lazy.Builder (Builder)
-import Data.Foldable (toList)
-
+import Data.Char (isSpace)
+import Data.List (intersperse, foldl')
+import Data.String
+import qualified Data.Text as T
+import Data.Text (Text)
+import qualified Text.DocTemplates as DT
 import Debug.Trace
 
-newtype Doc = Doc{ unDoc :: Seq D }
-  deriving (Semigroup, Monoid)
+-- | Class abstracting over various string types that
+-- can fold over characters.
+class (IsString a, Monoid a, Show a) => HasChars a where
+  foldrChar     :: (Char -> b -> b) -> b -> a -> b
+  splitLines    :: a -> [a]
+  replicateChar :: Int -> Char -> a
+  isNull        :: a -> Bool
 
-data D =
-    Text !Int !Text      -- ^ text with real width, does not break, no newline
-  | VFill !Int !Text     -- ^ like text, but repeats to fill vertically
-                         -- when adjacent to a block
-  | Newline              -- ^ newline
-  | SoftSpace            -- ^ space or newline depending on context
-  | PushNesting (Int -> Int -> Int)
-                         -- ^ change nesting level: first argument to
-                         -- function is current column (before left
-                         -- padding from centering or right alignment
-                         -- is added), second is current nesting level.
-  | PopNesting           -- ^ restore previous nesting level
-  | Blanks !Int          -- ^ ensure that there are at least n blank lines
-                         -- but do not add additional ones if there are
-  | Box !Int Doc         -- ^ lay out the document with the given width,
-                         -- and treat it as an indivisible unit
-  | WithColumn (Int -> Doc) -- ^ output conditional on column number
-  | WithLineLength (Maybe Int -> Doc) -- ^ output conditional on line length
-  | PushAlignment Alignment -- ^ set alignment
-  | PopAlignment        -- ^ revert to previous alignment
+instance HasChars Text where
+  foldrChar         = T.foldr
+  splitLines        = T.splitOn "\n"
+  replicateChar n c = T.replicate n (T.singleton c)
+  isNull            = T.null
 
-data Alignment = AlLeft | AlRight | AlCenter
-  deriving (Show)
+instance HasChars String where
+  foldrChar     = foldr
+  splitLines    = lines . (++"\n")
+  replicateChar = replicate
+  isNull        = null
 
-data Line = Line Alignment [D]
+data Doc a = Text Int a
+         | Block Int [a]
+         | Prefixed Text (Doc a)
+         | BeforeNonBlank (Doc a)
+         | Flush (Doc a)
+         | BreakingSpace
+         | AfterBreak Text
+         | CarriageReturn
+         | NewLine
+         | BlankLines Int  -- number of blank lines
+         | Concat (Doc a) (Doc a)
+         | Empty
+         deriving (Show, Eq, Functor, Foldable, Traversable)
 
-instance IsString Doc where
+instance Semigroup (Doc a) where
+  x <> Empty = x
+  Empty <> x = x
+  x <> y     = Concat x y
+
+instance Monoid (Doc a) where
+  mappend = (<>)
+  mempty = Empty
+
+instance IsString a => IsString (Doc a) where
   fromString = text
 
-data RenderState = RenderState{
-         column      :: !Int
-       , nesting     :: N.NonEmpty Int
-       , alignment   :: N.NonEmpty Alignment
-       , lineLength  :: Maybe Int  -- ^ 'Nothing' means no wrapping
-       , blanks      :: !Int       -- ^ Number of preceding blank lines
-       , currentLine :: [D]
-       , actualWidth :: Int        -- ^ Actual max line width
-       }
+instance IsString a => DT.TemplateTarget (Doc a) where
+  fromText = text . T.unpack
+  removeFinalNewline = chomp
+  nested = nest
+  isEmpty = isEmpty
 
--- | Render a Doc with an optional width.
-render :: Maybe Int -> Doc -> Text
-render linelen = TL.toStrict . B.toLazyText . mconcat .
-                 map buildLine .  snd .  buildLines linelen
+unfoldD :: Doc a -> [Doc a]
+unfoldD Empty = []
+unfoldD (Concat x@(Concat{}) y) = unfoldD x <> unfoldD y
+unfoldD (Concat x y)            = x : unfoldD y
+unfoldD x                       = [x]
 
--- | Returns (width, height) of Doc.
-getDimensions :: Maybe Int -> Doc -> (Int, Int)
-getDimensions linelen doc = (w, length ls)  -- width x height
-  where
-   (w, ls) = buildLines linelen doc
-
-buildLines :: Maybe Int -> Doc -> (Int, [Line])
-buildLines linelen doc =
-  evalState (do ls <- groupLines (toList (unDoc doc))
-                w <- gets actualWidth
-                return (w, handleBoxes ls))
-    (startingState linelen)
-
-startingState :: Maybe Int -> RenderState
-startingState linelen =
-  RenderState{ column = 0
-             , nesting = N.fromList [0]
-             , alignment = N.fromList [AlLeft]
-             , lineLength = linelen
-             , blanks = 0
-             , currentLine = mempty
-             , actualWidth = 0
-             }
-
-
--- Group Ds into lines.
-groupLines :: [D] -> State RenderState [Line]
-groupLines [] = ($ []) <$> emitLine
-groupLines (d:ds) = do
-  linelen <- gets lineLength
-  col <- gets column
-  curline <- gets currentLine
-  let hasSoftSpace = case curline of
-                           SoftSpace:_ -> True
-                           _           -> False
-  case d of
-    WithColumn f -> do
-      groupLines $ toList (unDoc (f col)) <> ds
-    WithLineLength f -> do
-      groupLines $ toList (unDoc (f linelen)) <> ds
-    PushNesting f -> do
-      modify $ \st ->
-        st{ nesting = f col (N.head (nesting st)) N.<| nesting st }
-      groupLines ds
-    PopNesting -> do
-      modify $ \st -> st{ nesting = case snd $ N.uncons (nesting st) of
-                                           Nothing   -> nesting st
-                                           Just rest -> rest }
-      groupLines ds
-    PushAlignment align' -> do
-      modify $ \st -> st{ alignment = align' N.<| alignment st }
-      groupLines ds
-    PopAlignment -> do
-      modify $ \st -> st{ alignment = case snd $ N.uncons (alignment st) of
-                                             Nothing   -> alignment st
-                                             Just rest -> rest }
-      groupLines ds
-    SoftSpace | not hasSoftSpace -> do
-      modify $ \st -> st{ currentLine = d : currentLine st
-                        , column = column st + 1 }
-      groupLines ds
-    Blanks n -> do
-      f <- emitLine
-      g <- emitBlanks n
-      f . g <$> groupLines ds
-    Text len _
-      | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
-          addToCurrentLine d
-          groupLines ds
-      | otherwise -> do
-          f <- emitLine
-          f <$> groupLines (d:ds)
-    VFill len _
-      | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
-          addToCurrentLine d
-          groupLines ds
-      | otherwise -> do
-          f <- emitLine
-          f <$> groupLines (d:ds)
-    Box len doc
-      | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
-          addToCurrentLine d
-          groupLines ds
-      | otherwise -> do
-          f <- emitLine
-          f <$> groupLines (d:ds)
-    Newline -> do
-          f <- emitLine
-          f <$> groupLines ds
-
-addToCurrentLine :: D -> State RenderState ()
-addToCurrentLine d = do
-  curline <- gets currentLine
-  nest N.:| _ <- gets nesting
-  let curline' =
-        case d of
-          SoftSpace -> curline
-          _ | null curline ->
-                 [Text nest (T.replicate nest " ")]
-            | otherwise -> curline
-  modify $ \st -> st{ currentLine = d : curline'
-                    , column = column st + dLength d }
-
-emitLine :: State RenderState ([Line] -> [Line])
-emitLine = do
-  align' N.:| _ <- gets alignment
-  curline <- gets currentLine
-  col <- gets column
-  nest N.:| _ <- gets nesting
-  modify $ \st -> st{ currentLine = []
-                    , column = nest
-                    , actualWidth = col
-                    }
-  if all isSoftSpace curline
-     then return id
-     else do
-       modify $ \st -> st{ blanks = 0 }
-       let printable = reverse (dropWhile isSoftSpace curline)
-       let printableWidth = foldr ((+) . dLength) 0 printable
-       mbLineLength <- gets lineLength
-       let lpad =
-            case (align', mbLineLength, printableWidth) of
-              (AlRight, Just linelen, w) | w > 0
-                 -> let padw = linelen - w
-                    in  (Text padw (T.replicate padw " ") :)
-              (AlCenter, Just linelen, w) | w > 0
-                 -> let padw = (linelen - w) `div` 2
-                    in  (Text padw (T.replicate padw " ") :)
-              _                           -> id
-       return $ (Line align' (lpad printable) :)
-
-emitBlanks :: Int -> State RenderState ([Line] -> [Line])
-emitBlanks n = do
-  align' N.:| _ <- gets alignment
-  nest N.:| _ <- gets nesting
-  bls <- gets blanks
-  let blsNeeded = n - bls
-  if blsNeeded > 0
-     then do
-       modify $ \st -> st { currentLine = []
-                          , column = nest
-                          , blanks = bls + 1 }
-       ((Line align' []:) .) <$> emitBlanks n
-     else return id
-
-isSoftSpace :: D -> Bool
-isSoftSpace SoftSpace = True
-isSoftSpace _ = False
-
-isBox :: D -> Bool
-isBox Box{} = True
-isBox _ = False
-
-handleBoxes :: [Line] -> [Line]
-handleBoxes [] = []
-handleBoxes (Line align' ds : ls)
-  | any isBox ds = newlines ++ handleBoxes ls
-  | otherwise    = Line align' ds : handleBoxes ls
- where
-  newlines = map (Line AlLeft . mconcat) $ transpose $
-              zipWith padBox boxes [1..]
-  boxes :: [(Int, Int, [[D]])]
-  boxes = map expandBox ds
-  numboxes = length boxes
-  expandBox (Box w doc) = (actualw, length ls, ls)
-    where (actualw, ls') = buildLines (Just w) doc
-          ls = [xs | Line _ xs <- ls']
-  expandBox d = (dLength d, 1, [[d]])
-  maxdepth = maximum $ map (\(_,x,_) -> x) boxes
-  padBox (w, d, ls) num
-    | d < maxdepth = ls ++ replicate (maxdepth - d)
-                             (case ls of
-                               [[VFill _ t]] -> [VFill w t]
-                               _ | num == numboxes -> []
-                                 | otherwise -> [Text w (T.replicate w " ")])
-    | otherwise    = ls
-
-dLength (Text n _) = n
-dLength SoftSpace  = 1
-dLength (Box n _)  = n
-dLength _          = 0
-
--- Render a line.
-buildLine :: Line -> B.Builder
-buildLine (Line align' ds) = mconcat (map buildD ds) <> "\n"
- where
-   buildD (Text _ t) = B.fromText t
-   buildD (VFill _ t) = B.fromText t
-   buildD SoftSpace  = B.fromText " "
-   buildD _ = mempty
-
-single :: D -> Doc
-single = Doc . Seq.singleton
-
--- | A breaking (reflowable) space.
-space :: Doc
-space = single SoftSpace
-
--- | A carriage return.  Does nothing if we're at the beginning of
--- a line; otherwise inserts a newline.
-cr :: Doc
-cr = single Newline
-
--- | Inserts a blank line unless one exists already.
--- (@blankline <> blankline@ has the same effect as @blankline@.
-blankline :: Doc
-blankline = single (Blanks 1)
-
--- | Inserts blank lines unless they exist already.
--- (@blanklines m <> blanklines n@ has the same effect as @blanklines (max m n)@.
-blanklines :: Int -> Doc
-blanklines n = single (Blanks n)
-
--- | A literal string.
-text :: String -> Doc
-text = Doc . toChunks
-  where toChunks :: String -> Seq D
-        toChunks [] = mempty
-        toChunks s =
-           case break (=='\n') s of
-             ([], _:ys) -> Newline Seq.<| toChunks ys
-             (xs, _:ys) -> Text (realLength xs) (T.pack xs) Seq.<|
-                               (Newline Seq.<| toChunks ys)
-             (xs, [])   -> Seq.singleton $ Text (realLength xs) (T.pack xs)
-
--- | A string that fills vertically next to a block; may not
--- contain \n.
-vfill :: String -> Doc
-vfill xs = single (VFill (realLength xs) (T.pack xs))
-
--- | A character.
-char :: Char -> Doc
-char c = single $ Text (charWidth c) (T.singleton c)
-
--- | Returns the width of a 'Doc' (without reflowing).
-offset :: Doc -> Int
-offset doc = fst $ getDimensions Nothing doc
-
--- | Returns the height of a block or other 'Doc' (without reflowing).
-height :: Doc -> Int
-height doc = snd $ getDimensions Nothing doc
-
--- | Returns the minimal width of a 'Doc' when reflowed at breakable spaces.
-minOffset :: Doc -> Int
-minOffset doc = fst $ getDimensions (Just 0) doc
-
--- | Output conditional on current column.
-withColumn :: (Int -> Doc) -> Doc
-withColumn f = single (WithColumn f)
-
--- | Output conditional on line length.
-withLineLength :: (Maybe Int -> Doc) -> Doc
-withLineLength f = single (WithLineLength f)
-
--- | Content to print only if it comes at the beginning of a line,
--- to be used e.g. for escaping line-initial `.` in roff man.
-afterBreak :: String -> Doc
-afterBreak s =
-  withColumn (\c -> if c == 0
-                       then text s
-                       else mempty)
-
--- | A box with the specified width.
-box :: Int -> Doc -> Doc
-box n doc = single $ Box n doc
-
--- | @lblock n d@ is a block of width @n@ characters, with
--- text derived from @d@ and aligned to the left.
-lblock :: Int -> Doc -> Doc
-lblock w doc = box w (leftAligned doc)
-
--- | Like 'lblock' but aligned to the right.
-rblock :: Int -> Doc -> Doc
-rblock w doc = box w (rightAligned doc)
-
--- | Like 'lblock' but aligned centered.
-cblock :: Int -> Doc -> Doc
-cblock w doc = box w (centerAligned doc)
-
--- | Align left.
-leftAligned :: Doc -> Doc
-leftAligned doc =
-  single (PushAlignment AlLeft) <>
-  doc <>
-  single (PopAlignment)
-
--- | Align right.
-rightAligned :: Doc -> Doc
-rightAligned doc =
-  single (PushAlignment AlRight) <>
-  doc <>
-  single (PopAlignment)
-
--- | Align right.
-centerAligned :: Doc -> Doc
-centerAligned doc =
-  single (PushAlignment AlCenter) <>
-  doc <>
-  single (PopAlignment)
-
--- | Chomps trailing blank space off of a 'Doc'.
-chomp :: Doc -> Doc
-chomp (Doc ds) =
-  case Seq.viewr ds of
-    rest Seq.:> Newline   -> chomp (Doc rest)
-    rest Seq.:> Blanks _  -> chomp (Doc rest)
-    rest Seq.:> SoftSpace -> chomp (Doc rest)
-    _                     -> Doc ds
-
--- | Removes leading blank lines from a 'Doc'.
-nestle :: Doc -> Doc
-nestle (Doc ds) =
-  case Seq.viewl ds of
-    Newline    Seq.:< rest  -> nestle (Doc rest)
-    (Blanks _) Seq.:< rest  -> nestle (Doc rest)
-    _                       -> Doc ds
+isBlank :: Doc a -> Bool
+isBlank BreakingSpace  = True
+isBlank CarriageReturn = True
+isBlank NewLine        = True
+isBlank (BlankLines _) = True
+-- isBlank (Text _ (c:_)) = isSpace c
+isBlank _              = False
 
 -- | True if the document is empty.
-isEmpty :: Doc -> Bool
-isEmpty = Seq.null . unDoc
+isEmpty :: Doc a -> Bool
+isEmpty Empty = True
+isEmpty _     = False
 
 -- | The empty document.
-empty :: Doc
+empty :: Doc a
 empty = mempty
 
 -- | Concatenate a list of 'Doc's.
-cat :: [Doc] -> Doc
+cat :: [Doc a] -> Doc a
 cat = mconcat
 
 -- | Same as 'cat'.
-hcat :: [Doc] -> Doc
+hcat :: [Doc a] -> Doc a
 hcat = mconcat
 
--- | Concatenate two 'Doc's, putting breakable space between them.
+-- | Concatenate a list of 'D's, putting breakable spaces
+-- between them.
 infixr 6 <+>
-(<+>) :: Doc -> Doc -> Doc
+(<+>) :: Doc a -> Doc a -> Doc a
 (<+>) x y
   | isEmpty x = y
   | isEmpty y = x
   | otherwise = x <> space <> y
 
--- | Same as 'cat', but putting breakable spaces between the 'Doc's.
-hsep :: [Doc] -> Doc
+-- | Same as 'cat', but putting breakable spaces between the
+-- 'Doc's.
+hsep :: [Doc a] -> Doc a
 hsep = foldr (<+>) empty
 
 infixr 5 $$
 -- | @a $$ b@ puts @a@ above @b@.
-($$) :: Doc -> Doc -> Doc
+($$) :: Doc a -> Doc a -> Doc a
 ($$) x y
   | isEmpty x = y
   | isEmpty y = x
@@ -479,87 +185,417 @@ infixr 5 $$
 
 infixr 5 $+$
 -- | @a $+$ b@ puts @a@ above @b@, with a blank line between.
-($+$) :: Doc -> Doc -> Doc
+($+$) :: Doc a -> Doc a -> Doc a
 ($+$) x y
   | isEmpty x = y
   | isEmpty y = x
   | otherwise = x <> blankline <> y
 
 -- | List version of '$$'.
-vcat :: [Doc] -> Doc
+vcat :: [Doc a] -> Doc a
 vcat = foldr ($$) empty
 
 -- | List version of '$+$'.
-vsep :: [Doc] -> Doc
+vsep :: [Doc a] -> Doc a
 vsep = foldr ($+$) empty
 
--- | Makes a 'Doc' non-reflowable.
-nowrap :: Doc -> Doc
-nowrap (Doc ds) = Doc $ fmap replaceSpace ds
-  where replaceSpace SoftSpace = Text 1 " "
-        replaceSpace x         = x
+-- | Removes leading blank lines from a 'Doc'.
+nestle :: Doc a -> Doc a
+nestle d =
+  case d of
+    BlankLines _              -> Empty
+    NewLine                   -> Empty
+    Concat (Concat x y) z     -> nestle (Concat x (Concat y z))
+    Concat BlankLines{} x     -> nestle x
+    Concat NewLine x          -> nestle x
+    _                         -> d
+
+-- | Chomps trailing blank space off of a 'Doc'.
+chomp :: Doc a -> Doc a
+chomp d =
+    case d of
+    BlankLines _              -> Empty
+    NewLine                   -> Empty
+    CarriageReturn            -> Empty
+    BreakingSpace             -> Empty
+    Prefixed s d'             -> Prefixed s (chomp d')
+    Concat (Concat x y) z     -> chomp (Concat x (Concat y z))
+    Concat x y                ->
+        case chomp y of
+          Empty -> chomp x
+          z     -> x <> z
+    _                         -> d
+
+type DocState a = State (RenderState a) ()
+
+data RenderState a = RenderState{
+         output     :: [a]        -- ^ In reverse order
+       , prefix     :: Text
+       , usePrefix  :: Bool
+       , lineLength :: Maybe Int  -- ^ 'Nothing' means no wrapping
+       , column     :: Int
+       , newlines   :: Int        -- ^ Number of preceding newlines
+       }
+
+newline :: HasChars a => DocState a
+newline = do
+  st' <- get
+  let rawpref = prefix st'
+  when (column st' == 0 && usePrefix st' && not (T.null rawpref)) $ do
+     let pref = fromString $ T.unpack $ T.dropWhileEnd isSpace rawpref
+     modify $ \st -> st{ output = pref : output st
+                       , column = column st + realLength pref }
+  modify $ \st -> st { output = "\n" : output st
+                     , column = 0
+                     , newlines = newlines st + 1
+                     }
+
+outp :: HasChars a => Int -> a -> DocState a
+outp off s = do           -- offset >= 0 (0 might be combining char)
+  st' <- get
+  let pref = fromString $ T.unpack $ prefix st'
+  when (column st' == 0 && usePrefix st' && not (isNull pref)) $
+    modify $ \st -> st{ output = pref : output st
+                    , column = column st + realLength pref }
+  modify $ \st -> st{ output = s : output st
+                    , column = column st + off
+                    , newlines = 0 }
+
+-- | Renders a 'Doc'.  @render (Just n)@ will use
+-- a line length of @n@ to reflow text on breakable spaces.
+-- @render Nothing@ will not reflow text.
+render :: HasChars a => Maybe Int -> Doc a -> a
+render linelen doc = mconcat . reverse . output $
+  execState (renderDoc doc) startingState
+   where startingState = RenderState{
+                            output = mempty
+                          , prefix = mempty
+                          , usePrefix = True
+                          , lineLength = linelen
+                          , column = 0
+                          , newlines = 2 }
+
+renderDoc :: HasChars a => Doc a -> DocState a
+renderDoc = renderList . unfoldD
+
+data IsBlock a = IsBlock Int [a]
+
+-- This would be nicer with a pattern synonym
+-- pattern VBlock i s <- mkIsBlock -> Just (IsBlock ..)
+
+renderList :: HasChars a => [Doc a] -> DocState a
+renderList [] = return ()
+
+renderList (Concat{} : xs) = renderList xs -- should not happen after unfoldD
+
+renderList (Empty : xs) = renderList xs -- should not happen after unfoldD
+
+renderList (NewLine : []) = renderList [CarriageReturn]
+
+renderList (BlankLines _ : []) = renderList [CarriageReturn]
+
+renderList (BreakingSpace : []) = return ()
+
+renderList (Text off s : xs) = do
+  outp off s
+  renderList xs
+
+renderList (Prefixed pref d : xs) = do
+  st <- get
+  let oldPref = prefix st
+  put st{ prefix = prefix st <> pref }
+  renderDoc d
+  modify $ \s -> s{ prefix = oldPref }
+  -- renderDoc CarriageReturn
+  renderList xs
+
+renderList (Flush d : xs) = do
+  st <- get
+  let oldUsePrefix = usePrefix st
+  put st{ usePrefix = False }
+  renderDoc d
+  modify $ \s -> s{ usePrefix = oldUsePrefix }
+  renderList xs
+
+renderList (BeforeNonBlank d : xs) =
+  case xs of
+    (x:_) | isBlank x -> renderList xs
+          | otherwise -> renderDoc d >> renderList xs
+    []                -> renderList xs
+
+renderList (BlankLines m : BlankLines n : xs) =
+  renderList (BlankLines (max m n) : xs)
+
+renderList (BlankLines num : BreakingSpace : xs) =
+  renderList (BlankLines num : xs)
+
+renderList (BlankLines m : CarriageReturn : xs) =
+  renderList (BlankLines m : xs)
+
+renderList (BlankLines m : NewLine : xs) =
+  renderList (BlankLines m : xs)
+
+renderList (NewLine : BlankLines m : xs) =
+  renderList (BlankLines m : xs)
+
+renderList (NewLine : BreakingSpace : xs) =
+  renderList (NewLine : xs)
+
+renderList (NewLine : CarriageReturn : xs) =
+  renderList (NewLine : xs)
+
+renderList (CarriageReturn : CarriageReturn : xs) =
+  renderList (CarriageReturn : xs)
+
+renderList (CarriageReturn : NewLine : xs) =
+  renderList (NewLine : xs)
+
+renderList (CarriageReturn : BlankLines m : xs) =
+  renderList (BlankLines m : xs)
+
+renderList (CarriageReturn : BreakingSpace : xs) =
+  renderList (CarriageReturn : xs)
+
+renderList (BlankLines num : xs) = do
+  st <- get
+  case output st of
+     _ | newlines st > num -> return ()
+       | otherwise -> replicateM_ (1 + num - newlines st) newline
+  renderList xs
+
+renderList (CarriageReturn : xs) = do
+  st <- get
+  if newlines st > 0
+     then renderList xs
+     else do
+       newline
+       renderList xs
+
+renderList (NewLine : xs) = do
+  newline
+  renderList xs
+
+renderList (BreakingSpace : CarriageReturn : xs) =
+  renderList (CarriageReturn:xs)
+renderList (BreakingSpace : NewLine : xs) = renderList (NewLine:xs)
+renderList (BreakingSpace : BlankLines n : xs) = renderList (BlankLines n:xs)
+renderList (BreakingSpace : BreakingSpace : xs) = renderList (BreakingSpace:xs)
+renderList (BreakingSpace : xs) = do
+  let isText (Text _ _)     = True
+      isText (Block _ _)    = True
+      isText (AfterBreak _) = True
+      isText _              = False
+  let isBreakingSpace BreakingSpace = True
+      isBreakingSpace _             = False
+  let xs' = dropWhile isBreakingSpace xs
+  let next = takeWhile isText xs'
+  st <- get
+  let off = foldl' (+) 0 $ map offsetOf next
+  case lineLength st of
+        Just l | column st + 1 + off > l -> do
+          newline
+        _  -> if column st > 0
+                 then outp 1 " "
+                 else return ()
+  renderList xs'
+
+renderList (AfterBreak t : xs) = do
+  st <- get
+  if newlines st > 0
+     then renderList (fromString (T.unpack t) : xs)
+     else renderList xs
+
+renderList (Block i1 s1 : Block i2 s2  : xs) =
+  renderList (mergeBlocks False (IsBlock i1 s1) (IsBlock i2 s2) : xs)
+
+renderList (Block i1 s1 : BreakingSpace : Block i2 s2 : xs) =
+  renderList (mergeBlocks True (IsBlock i1 s1) (IsBlock i2 s2) : xs)
+
+renderList (Block _width lns : xs) = do
+  st <- get
+  let oldPref = prefix st
+  case column st - realLength oldPref of
+        n | n > 0 -> modify $ \s -> s{ prefix = oldPref <> T.replicate n " " }
+        _ -> return ()
+  renderList $ intersperse CarriageReturn (map (Text 0) lns)
+  modify $ \s -> s{ prefix = oldPref }
+  renderList xs
+
+mergeBlocks :: HasChars a => Bool -> IsBlock a -> IsBlock a -> Doc a
+mergeBlocks addSpace (IsBlock w1 lns1) (IsBlock w2 lns2) =
+  Block (w1 + w2 + if addSpace then 1 else 0) $
+     zipWith (\l1 l2 -> pad w1 l1 <> l2) lns1' (map sp lns2')
+    where (lns1', lns2') = case (length lns1, length lns2) of
+                                (x, y) | x > y -> (lns1,
+                                                   lns2 ++ replicate (x - y)
+                                                            mempty)
+                                       | x < y -> (lns1 ++ replicate (y - x)
+                                                            mempty ,
+                                                   lns2)
+                                       | otherwise -> (lns1, lns2)
+          pad n s = s <> replicateChar (n - realLength s) ' '
+          sp xs = if addSpace && realLength xs > 0
+                     then " " <> xs
+                     else xs
+
+offsetOf :: Doc a -> Int
+offsetOf (Text o _)    = o
+offsetOf (Block w _)   = w
+offsetOf BreakingSpace = 1
+offsetOf _             = 0
+
+-- | A literal string.
+text :: IsString a => String -> Doc a
+text "" = mempty
+text s = case break (=='\n') s of
+           ("", "")   -> Empty
+           (xs, "")   -> Text (realLength xs) (fromString xs)
+           ("", _:ys) -> NewLine <> text ys
+           (xs, _:ys) -> Text (realLength xs) (fromString xs) <>
+                           NewLine <> text ys
+
+-- | A character.
+char :: IsString a => Char -> Doc a
+char c = text $ fromString [c]
+
+-- | A breaking (reflowable) space.
+space :: Doc a
+space = BreakingSpace
+
+-- | A carriage return.  Does nothing if we're at the beginning of
+-- a line; otherwise inserts a newline.
+cr :: Doc a
+cr = CarriageReturn
+
+-- | Inserts a blank line unless one exists already.
+-- (@blankline <> blankline@ has the same effect as @blankline@.
+blankline :: Doc a
+blankline = BlankLines 1
+
+-- | Inserts blank lines unless they exist already.
+-- (@blanklines m <> blanklines n@ has the same effect as @blanklines (max m n)@.
+blanklines :: Int -> Doc a
+blanklines n = BlankLines n
+
+-- | Uses the specified string as a prefix for every line of
+-- the inside document (except the first, if not at the beginning
+-- of the line).
+prefixed :: IsString a => String -> Doc a -> Doc a
+prefixed pref doc
+  | isEmpty doc = Empty
+  | otherwise   = Prefixed (fromString pref) doc
 
 -- | Makes a 'Doc' flush against the left margin.
-flush :: Doc -> Doc
-flush doc =
-  Doc (Seq.fromList [PushNesting (\_ _ -> 0), Newline]) <>
-  doc <>
-  single PopNesting
+flush :: Doc a -> Doc a
+flush doc
+  | isEmpty doc = Empty
+  | otherwise   = Flush doc
 
 -- | Indents a 'Doc' by the specified number of spaces.
-nest :: Int -> Doc -> Doc
-nest ind doc =
-  single (PushNesting (\_ nest -> nest + ind)) <>
-  doc <>
-  single PopNesting
+nest :: IsString a => Int -> Doc a -> Doc a
+nest ind = prefixed (replicate ind ' ')
 
 -- | A hanging indent. @hang ind start doc@ prints @start@,
 -- then @doc@, leaving an indent of @ind@ spaces on every
 -- line but the first.
-hang :: Int -> Doc -> Doc -> Doc
-hang ind start doc = start <> nest ind doc
+hang :: IsString a => Int -> Doc a -> Doc a -> Doc a
+hang ind start doc
+  | isEmpty doc = Empty
+  | otherwise   = start <> nest ind doc
 
--- | Align a 'Doc' so that new lines start at current column.
-aligned :: Doc -> Doc
-aligned doc =
-  single (PushNesting (\col _ -> col)) <>
-  doc <>
-  single PopNesting
+-- | @beforeNonBlank d@ conditionally includes @d@ unless it is
+-- followed by blank space.
+beforeNonBlank :: Doc a -> Doc a
+beforeNonBlank d = BeforeNonBlank d
 
--- | Uses the specified string as a prefix for every line of
--- the argument.
-prefixed :: String -> Doc -> Doc
-prefixed pref doc =
-  withLineLength $ \mblen ->
-    let boxwidth =
-         case mblen of
-           Just l  -> l - realLength pref
-           Nothing -> fst (getDimensions Nothing doc) - realLength pref
-    in  text pref <> box boxwidth doc
+-- | Makes a 'Doc' non-reflowable.
+nowrap :: IsString a => Doc a -> Doc a
+nowrap doc = mconcat . map replaceSpace . unfoldD $ doc
+  where replaceSpace BreakingSpace = Text 1 $ fromString " "
+        replaceSpace x             = x
+
+-- | Content to print only if it comes at the beginning of a line,
+-- to be used e.g. for escaping line-initial `.` in roff man.
+afterBreak :: Text -> Doc a
+afterBreak t = AfterBreak t
+
+-- | Returns the width of a 'Doc'.
+offset :: HasChars a => Doc a -> Int
+offset d = maximum (0: map realLength (splitLines $ render Nothing d))
+
+-- | Returns the minimal width of a 'Doc' when reflowed at breakable spaces.
+minOffset :: HasChars a => Doc a -> Int
+minOffset d = maximum (0: map realLength (splitLines $ render (Just 0) d))
+
+-- | @lblock n d@ is a block of width @n@ characters, with
+-- text derived from @d@ and aligned to the left.
+lblock :: HasChars a => Int -> Doc a -> Doc a
+lblock = block id
+
+-- | Like 'lblock' but aligned to the right.
+rblock :: HasChars a => Int -> Doc a -> Doc a
+rblock w = block (\s -> replicateChar (w - realLength s) ' ' <> s) w
+
+-- | Like 'lblock' but aligned centered.
+cblock :: HasChars a => Int -> Doc a -> Doc a
+cblock w = block (\s -> replicateChar ((w - realLength s) `div` 2) ' ' <> s) w
+
+-- | Returns the height of a block or other 'Doc'.
+height :: HasChars a => Doc a -> Int
+height = length . splitLines . render Nothing
+
+block :: HasChars a => (a -> a) -> Int -> Doc a -> Doc a
+block filler width d
+  | width < 1 && not (isEmpty d) = block filler 1 d
+  | otherwise                    = Block width $ map filler
+                                 $ chop width $ render (Just width) d
+
+chop :: HasChars a => Int -> a -> [a]
+chop n =
+   concatMap chopLine . removeFinalEmpty . map addRealLength . splitLines
+ where
+   removeFinalEmpty xs = case lastMay xs of
+                           Just (0, _) -> initSafe xs
+                           _           -> xs
+   addRealLength l = (realLength l, l)
+   chopLine (len, l)
+     | len <= n  = [l]
+     | otherwise = map snd $
+                    foldrChar
+                     (\c ls ->
+                       let clen = charWidth c
+                           cs = replicateChar 1 c
+                        in case ls of
+                             (len', l'):rest
+                               | len' + clen > n ->
+                                   (clen, cs):(len', l'):rest
+                               | otherwise ->
+                                   (len' + clen, l' <> cs):rest
+                             [] -> [(clen, cs)]) [] l
 
 -- | Encloses a 'Doc' inside a start and end 'Doc'.
-inside :: Doc -> Doc -> Doc -> Doc
+inside :: Doc a -> Doc a -> Doc a -> Doc a
 inside start end contents =
   start <> contents <> end
 
 -- | Puts a 'Doc' in curly braces.
-braces :: Doc -> Doc
+braces :: IsString a => Doc a -> Doc a
 braces = inside (char '{') (char '}')
 
 -- | Puts a 'Doc' in square brackets.
-brackets :: Doc -> Doc
+brackets :: IsString a => Doc a -> Doc a
 brackets = inside (char '[') (char ']')
 
 -- | Puts a 'Doc' in parentheses.
-parens :: Doc -> Doc
+parens :: IsString a => Doc a -> Doc a
 parens = inside (char '(') (char ')')
 
 -- | Wraps a 'Doc' in single quotes.
-quotes :: Doc -> Doc
+quotes :: IsString a => Doc a -> Doc a
 quotes = inside (char '\'') (char '\'')
 
 -- | Wraps a 'Doc' in double quotes.
-doubleQuotes :: Doc -> Doc
+doubleQuotes :: IsString a => Doc a -> Doc a
 doubleQuotes = inside (char '"') (char '"')
 
 -- | Returns width of a character in a monospace font:  0 for a combining
@@ -609,5 +645,6 @@ charWidth c =
 
 -- | Get real length of string, taking into account combining and double-wide
 -- characters.
-realLength :: String -> Int
-realLength = foldl' (+) 0 . map charWidth
+realLength :: HasChars a => a -> Int
+realLength = foldrChar (\c tot -> tot + charWidth c) 0
+
