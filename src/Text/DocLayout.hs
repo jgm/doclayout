@@ -22,9 +22,9 @@ module Text.DocLayout (
      , nest
      , aligned
      , hang
-     , leftAligned
-     , rightAligned
-     , centerAligned
+     , alignLeft
+     , alignRight
+     , alignCenter
      , nowrap
      , withColumn
      , withLineLength
@@ -387,33 +387,33 @@ box n doc = single $ Box n doc
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left.
 lblock :: Int -> Doc -> Doc
-lblock w doc = box w (leftAligned doc)
+lblock w doc = box w (alignLeft doc)
 
 -- | Like 'lblock' but aligned to the right.
 rblock :: Int -> Doc -> Doc
-rblock w doc = box w (rightAligned doc)
+rblock w doc = box w (alignRight doc)
 
 -- | Like 'lblock' but aligned centered.
 cblock :: Int -> Doc -> Doc
-cblock w doc = box w (centerAligned doc)
+cblock w doc = box w (alignCenter doc)
 
 -- | Align left.
-leftAligned :: Doc -> Doc
-leftAligned doc =
+alignLeft :: Doc -> Doc
+alignLeft doc =
   single (PushAlignment AlLeft) <>
   doc <>
   single PopAlignment
 
 -- | Align right.
-rightAligned :: Doc -> Doc
-rightAligned doc =
+alignRight :: Doc -> Doc
+alignRight doc =
   single (PushAlignment AlRight) <>
   doc <>
   single PopAlignment
 
 -- | Align right.
-centerAligned :: Doc -> Doc
-centerAligned doc =
+alignCenter :: Doc -> Doc
+alignCenter doc =
   single (PushAlignment AlCenter) <>
   doc <>
   single PopAlignment
@@ -435,9 +435,19 @@ nestle (Doc ds) =
     Blanks _ Seq.:< rest    -> nestle (Doc rest)
     _                       -> Doc ds
 
--- | True if the document is empty.
+-- | True if the document is empty.  A document with
+-- non-printing directives like 'PopNesting' counts as
+-- empty.  So @isEmpty (nest 5 empty) == True@.
 isEmpty :: Doc -> Bool
-isEmpty = Seq.null . unDoc
+isEmpty = all isDirective . unDoc
+  where
+    isDirective PushNesting{} = True
+    isDirective PopNesting = True
+    isDirective WithColumn{} = True
+    isDirective WithLineLength{} = True
+    isDirective PushAlignment{} = True
+    isDirective PopAlignment = True
+    isDirective _ = False
 
 -- | The empty document.
 empty :: Doc
