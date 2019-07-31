@@ -536,7 +536,7 @@ prefixed pref doc =
          case mblen of
            Just l  -> l - realLength pref
            Nothing -> fst (getDimensions Nothing doc) - realLength pref
-    in  text pref <> box boxwidth doc
+    in  vfill pref <> box boxwidth doc
 
 -- | Encloses a 'Doc' inside a start and end 'Doc'.
 inside :: Doc -> Doc -> Doc -> Doc
