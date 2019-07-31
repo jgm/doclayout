@@ -63,9 +63,8 @@ where
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
-import Control.Monad
 import qualified Data.List.NonEmpty as N
-import Data.Semigroup
+import Control.Monad (unless)
 import Data.String
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
@@ -74,8 +73,6 @@ import Control.Monad.State.Strict
 import qualified Data.Text.Lazy.Builder as B
 import Data.Text.Lazy.Builder (Builder)
 import Data.Foldable (toList)
-
-import Debug.Trace
 
 newtype Doc = Doc{ unDoc :: Seq D }
   deriving (Semigroup, Monoid)
@@ -104,7 +101,7 @@ data D =
 data Alignment = AlLeft | AlRight | AlCenter
   deriving (Show)
 
-data Line = Line Alignment [D]
+data Line = Line [D]
 
 instance IsString Doc where
   fromString = text
@@ -181,9 +178,10 @@ groupLines (d:ds) = do
                                              Nothing   -> alignment st
                                              Just rest -> rest }
       groupLines ds
-    SoftSpace | not hasSoftSpace -> do
-      modify $ \st -> st{ currentLine = d : currentLine st
-                        , column = column st + 1 }
+    SoftSpace -> do
+      unless hasSoftSpace $
+        modify $ \st -> st{ currentLine = d : currentLine st
+                          , column = column st + 1 }
       groupLines ds
     Blanks n -> do
       f <- emitLine
@@ -203,7 +201,7 @@ groupLines (d:ds) = do
       | otherwise -> do
           f <- emitLine
           f <$> groupLines (d:ds)
-    Box len doc
+    Box len _doc
       | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
           addToCurrentLine d
           groupLines ds
@@ -217,12 +215,12 @@ groupLines (d:ds) = do
 addToCurrentLine :: D -> State RenderState ()
 addToCurrentLine d = do
   curline <- gets currentLine
-  nest N.:| _ <- gets nesting
+  nest' N.:| _ <- gets nesting
   let curline' =
         case d of
           SoftSpace -> curline
           _ | null curline ->
-                 [Text nest (T.replicate nest " ")]
+                 [Text nest' (T.replicate nest' " ")]
             | otherwise -> curline
   modify $ \st -> st{ currentLine = d : curline'
                     , column = column st + dLength d }
@@ -232,9 +230,9 @@ emitLine = do
   align' N.:| _ <- gets alignment
   curline <- gets currentLine
   col <- gets column
-  nest N.:| _ <- gets nesting
+  nest' N.:| _ <- gets nesting
   modify $ \st -> st{ currentLine = []
-                    , column = nest
+                    , column = nest'
                     , actualWidth = col
                     }
   if all isSoftSpace curline
@@ -253,20 +251,19 @@ emitLine = do
                  -> let padw = (linelen - w) `div` 2
                     in  (Text padw (T.replicate padw " ") :)
               _                           -> id
-       return $ (Line align' (lpad printable) :)
+       return $ (Line (lpad printable) :)
 
 emitBlanks :: Int -> State RenderState ([Line] -> [Line])
 emitBlanks n = do
-  align' N.:| _ <- gets alignment
-  nest N.:| _ <- gets nesting
+  nest' N.:| _ <- gets nesting
   bls <- gets blanks
   let blsNeeded = n - bls
   if blsNeeded > 0
      then do
        modify $ \st -> st { currentLine = []
-                          , column = nest
+                          , column = nest'
                           , blanks = bls + 1 }
-       ((Line align' []:) .) <$> emitBlanks n
+       ((Line []:) .) <$> emitBlanks n
      else return id
 
 isSoftSpace :: D -> Bool
@@ -279,36 +276,37 @@ isBox _ = False
 
 handleBoxes :: [Line] -> [Line]
 handleBoxes [] = []
-handleBoxes (Line align' ds : ls)
+handleBoxes (Line ds : ls)
   | any isBox ds = newlines ++ handleBoxes ls
-  | otherwise    = Line align' ds : handleBoxes ls
+  | otherwise    = Line ds : handleBoxes ls
  where
-  newlines = map (Line AlLeft . mconcat) $ transpose $
+  newlines = map (Line . mconcat) $ transpose $
               zipWith padBox boxes [1..]
   boxes :: [(Int, Int, [[D]])]
   boxes = map expandBox ds
   numboxes = length boxes
-  expandBox (Box w doc) = (actualw, length ls, ls)
+  expandBox (Box w doc) = (actualw, length ls'', ls'')
     where (actualw, ls') = buildLines (Just w) doc
-          ls = [xs | Line _ xs <- ls']
+          ls'' = [xs | Line xs <- ls']
   expandBox d = (dLength d, 1, [[d]])
   maxdepth = maximum $ map (\(_,x,_) -> x) boxes
-  padBox (w, d, ls) num
-    | d < maxdepth = ls ++ replicate (maxdepth - d)
-                             (case ls of
+  padBox (w, d, ls') num
+    | d < maxdepth = ls' ++ replicate (maxdepth - d)
+                             (case ls' of
                                [[VFill _ t]] -> [VFill w t]
                                _ | num == numboxes -> []
                                  | otherwise -> [Text w (T.replicate w " ")])
-    | otherwise    = ls
+    | otherwise    = ls'
 
+dLength :: D -> Int
 dLength (Text n _) = n
 dLength SoftSpace  = 1
 dLength (Box n _)  = n
 dLength _          = 0
 
 -- Render a line.
-buildLine :: Line -> B.Builder
-buildLine (Line align' ds) = mconcat (map buildD ds) <> "\n"
+buildLine :: Line -> Builder
+buildLine (Line ds) = mconcat (map buildD ds) <> "\n"
  where
    buildD (Text _ t) = B.fromText t
    buildD (VFill _ t) = B.fromText t
@@ -509,7 +507,7 @@ flush doc =
 -- | Indents a 'Doc' by the specified number of spaces.
 nest :: Int -> Doc -> Doc
 nest ind doc =
-  single (PushNesting (\_ nest -> nest + ind)) <>
+  single (PushNesting (\_ n -> n + ind)) <>
   doc <>
   single PopNesting
 
