@@ -253,11 +253,11 @@ emitLine = do
                     , column = nest'
                     , actualWidth = col
                     }
-  if all isSoftSpace curline
+  let printable = reverse (dropWhile isSoftSpace curline)
+  if null printable
      then return id
      else do
        modify $ \st -> st{ blanks = 0 }
-       let printable = reverse (dropWhile isSoftSpace curline)
        let printableWidth = foldr ((+) . dLength) 0 printable
        mbLineLength <- gets lineLength
        let pad =
