@@ -284,7 +284,7 @@ handleBoxes (Line ds : ls)
   numboxes = length boxes
   expandBox (Box w doc) = (actualw, length ls'', ls'')
     where (actualw, ls') = buildLines (Just w) doc
-          ls'' = [xs | Line xs <- ls']
+          ls'' = map unLine ls'
   expandBox d = (dLength d, 1, [[d]])
   maxdepth = maximum $ map (\(_,x,_) -> x) boxes
   padBox (w, d, ls') num
