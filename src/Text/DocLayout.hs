@@ -19,6 +19,7 @@ module Text.DocLayout (
      , vfill
      , char
      , box
+     , resizableBox
      , prefixed
      , flush
      , nest
@@ -199,8 +200,7 @@ groupLines (d:ds) = do
       groupLines ds
     SoftSpace -> do
       unless hasSoftSpace $
-        modify $ \st -> st{ currentLine = d : currentLine st
-                          , column = column st + 1 }
+        modify $ \st -> st{ currentLine = d : currentLine st }
       groupLines ds
     Blanks n -> do
       f <- emitLine
@@ -241,8 +241,21 @@ addToCurrentLine d = do
           _ | null curline ->
                  [Text nest' (T.replicate nest' " ")]
             | otherwise -> curline
-  modify $ \st -> st{ currentLine = d : curline'
-                    , column = column st + dLength d }
+  col <- gets column
+  linelen <- gets lineLength
+  let newcol = col + dLength d
+  let d' = case (linelen, d) of
+             (Just l, Text _ t) | newcol > l ->
+                   Text (newcol - l) (T.take (l - col) t)
+             (Just l, VFill _ t) | newcol > l ->
+                   VFill (newcol - l) (T.take (l - col) t)
+             _ -> d
+  modify $ \st -> st{ currentLine = d' : curline'
+                    , column = newcol }
+                    -- note, newcol may be over line length if
+                    -- we had truncation. that is intended, so
+                    -- that getDimensions can pick up proper
+                    -- dimensions.
 
 emitLine :: State RenderState ([Line] -> [Line])
 emitLine = do
@@ -252,7 +265,10 @@ emitLine = do
   nest' N.:| _ <- gets nesting
   modify $ \st -> st{ currentLine = []
                     , column = nest'
-                    , actualWidth = col
+                    , actualWidth =
+                       if col > actualWidth st
+                          then col
+                          else actualWidth st
                     }
   let printable = reverse (dropWhile isSoftSpace curline)
   if null printable
@@ -308,9 +324,8 @@ handleBoxes (Line ds : ls)
   boxes :: [(Int, Int, [[D]])]
   boxes = map expandBox ds
   numboxes = length boxes
-  expandBox (Box w doc) = (actualw, length ls'', ls'')
-    where (actualw, ls') = buildLines (Just w) doc
-          ls'' = map unLine ls'
+  expandBox (Box w doc) = (w, length ls', ls')
+    where ls' = map unLine . snd $ buildLines (Just w) doc
   expandBox d = (dLength d, 1, [[d]])
   maxdepth = maximum $ map (\(_,x,_) -> x) boxes
   padBox (w, d, ls') num
@@ -408,9 +423,26 @@ afterBreak s =
                        then text s
                        else mempty)
 
--- | A box with the specified width.
+-- | A box with the specified width.  If content can't fit
+-- in the width, it is silently truncated.
 box :: Int -> Doc -> Doc
 box n doc = single $ Box n doc
+
+-- | A box with an optional minimum and maximum width.
+-- If no minimum width is specified, the box will not
+-- be larger than the narrowest space needed to contain its contents.
+-- If no maximum width is specified, it will expand as
+-- needed to fit its contents.
+resizableBox :: Maybe Int -> Maybe Int -> Doc -> Doc
+resizableBox mbMinWidth mbMaxWidth doc = box width doc
+  where
+   contentWidth = minOffset doc
+   width = case (mbMinWidth, mbMaxWidth) of
+              (Nothing, Nothing)             -> contentWidth
+              (Nothing, Just maxWidth)       -> min maxWidth contentWidth
+              (Just minWidth, Nothing)       -> max minWidth contentWidth
+              (Just minWidth, Just maxWidth) ->
+                min (max minWidth contentWidth) maxWidth
 
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left.

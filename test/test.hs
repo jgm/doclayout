@@ -11,9 +11,9 @@ main = defaultMain $ testGroup "Tests" tests
 
 tests :: [TestTree]
 tests =
-  [ testCase "simple text" $
+  [ testCase "simple text with truncation" $
       render (Just 4) ("hello" <+> "there")
-      @?= ("hello\nthere" :: String)
+      @?= ("hell\nther" :: String)
 
   , testCase "nontrivial empty doc" $
       isEmpty (nest 5 (alignCenter empty))
