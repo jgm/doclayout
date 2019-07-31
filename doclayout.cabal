@@ -46,6 +46,19 @@ test-suite doclayout-test
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 
+benchmark doclayout-bench
+  Type:            exitcode-stdio-1.0
+  Main-Is:         bench.hs
+  Hs-Source-Dirs:  bench
+  Build-Depends:   doclayout,
+                   base >= 4.8 && < 5,
+                   filepath,
+                   text,
+                   containers,
+                   criterion >= 1.0 && < 1.6
+  Ghc-Options:   -rtsopts -Wall -fno-warn-unused-do-bind
+  Default-Language: Haskell2010
+
 source-repository head
   type:     git
   location: https://github.com/jgm/doclayout
