@@ -26,4 +26,8 @@ tests =
   , testCase "breaking space before empty box" $
       render Nothing ("a" <> space <> box 3 mempty)
       @?= "a"
+  , testCase "vfill" $
+      render Nothing (vfill "|" <> box 2 (vcat $ replicate 4 "aa") <>
+                      vfill "|")
+      @?= "|aa|\n|aa|\n|aa|\n|aa|"
   ]
