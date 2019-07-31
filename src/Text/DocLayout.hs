@@ -507,16 +507,12 @@ nowrap (Doc ds) = Doc $ fmap replaceSpace ds
 -- | Makes a 'Doc' flush against the left margin.
 flush :: Doc -> Doc
 flush doc =
-  Doc (Seq.fromList [PushNesting (\_ _ -> 0), Newline]) <>
-  doc <>
-  single PopNesting
+  single (PushNesting (\_ _ -> 0)) <> doc <> single PopNesting
 
 -- | Indents a 'Doc' by the specified number of spaces.
 nest :: Int -> Doc -> Doc
 nest ind doc =
-  single (PushNesting (\_ n -> n + ind)) <>
-  doc <>
-  single PopNesting
+  single (PushNesting (\_ n -> n + ind)) <> doc <> single PopNesting
 
 -- | A hanging indent. @hang ind start doc@ prints @start@,
 -- then @doc@, leaving an indent of @ind@ spaces on every
