@@ -35,6 +35,18 @@ cases =
   , bench "reflow (Text.Pandoc.Pretty)" $
       nf (P.render (Just 20) :: P.Doc -> Text)
          (P.hsep $ map P.text $ words . unwords $ replicate 50 bigtext)
+  , bench "tabular" $
+      nf (render (Just 80))
+         (let blah = hsep $ map text $ words . unwords
+                           $ replicate 50 bigtext
+          in  cblock 20 blah <> lblock 30 blah <> rblock 10 blah $$
+              cblock 50 (nest 5 blah) <> rblock 10 blah)
+  , bench "tabular (Text.Pandoc.Pretty)" $
+      nf (P.render (Just 80) :: P.Doc -> Text)
+         (let blah = P.hsep $ map P.text $ words . unwords
+                           $ replicate 50 bigtext
+          in  P.cblock 20 blah <> P.lblock 30 blah <> P.rblock 10 blah P.$$
+              P.cblock 50 (P.nest 5 blah) <> P.rblock 10 blah)
   , bench "soft spaces at end of line" $
       nf (render Nothing)
          ("a" <> mconcat (replicate 50 (space <> box 1 mempty)))
