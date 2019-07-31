@@ -100,7 +100,7 @@ data D =
 data Alignment = AlLeft | AlRight | AlCenter
   deriving (Show)
 
-data Line = Line [D]
+newline Line = Line { unLine :: [D] }
 
 instance IsString Doc where
   fromString = text
