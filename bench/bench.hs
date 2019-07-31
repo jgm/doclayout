@@ -29,6 +29,12 @@ cases =
       nf (P.render Nothing :: P.Doc -> Text)
          (P.nest 3 $ P.cblock 20 $ P.vcat $ replicate 15 $
            P.hsep $ map P.text $ words bigtext)
+  , bench "reflow" $
+      nf (render (Just 20))
+         (hsep $ map text $ words . unwords $ replicate 50 bigtext)
+  , bench "reflow (Text.Pandoc.Pretty)" $
+      nf (P.render (Just 20) :: P.Doc -> Text)
+         (P.hsep $ map P.text $ words . unwords $ replicate 50 bigtext)
   , bench "soft spaces at end of line" $
       nf (render Nothing)
          ("a" <> mconcat (replicate 50 (space <> box 1 mempty)))
