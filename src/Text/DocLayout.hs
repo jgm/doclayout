@@ -80,7 +80,7 @@ import Data.Semigroup (Semigroup)
 #endif
 
 newtype Doc = Doc{ unDoc :: Seq D }
-  deriving (Semigroup, Monoid)
+  deriving (Semigroup, Monoid, Show)
 
 data D =
     Text !Int !Text      -- ^ text with real width, does not break, no newline
@@ -103,10 +103,25 @@ data D =
   | PushAlignment Alignment -- ^ set alignment
   | PopAlignment        -- ^ revert to previous alignment
 
+instance Show D where
+  show (Text n s) = "Text " ++ show n ++ " " ++ show s
+  show (VFill n s) = "VFill " ++ show n ++ " " ++ show s
+  show Newline = "Newline"
+  show SoftSpace = "SoftSpace"
+  show (PushNesting _) = "PushNesting <function>"
+  show PopNesting = "PopNesting"
+  show (Blanks n) = "Blanks " ++ show n
+  show (Box n d) = "Box " ++ show n ++ " " ++ show d
+  show (WithColumn _) = "WithColumn <function>"
+  show (WithLineLength _) = "WithLineLength <function>"
+  show (PushAlignment al) = "PushAlignment " ++ show al
+  show PopAlignment = "PopAlignment"
+
 data Alignment = AlLeft | AlRight | AlCenter
   deriving (Show)
 
 newtype Line = Line { unLine :: [D] }
+  deriving (Show)
 
 instance IsString Doc where
   fromString = text
@@ -120,6 +135,7 @@ data RenderState = RenderState{
        , currentLine :: [D]
        , actualWidth :: Int        -- ^ Actual max line width
        }
+  deriving (Show)
 
 -- | Render a Doc with an optional width.
 render :: Maybe Int -> Doc -> Text
