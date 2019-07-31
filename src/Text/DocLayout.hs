@@ -59,6 +59,7 @@ module Text.DocLayout (
      )
 
 where
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
@@ -100,7 +101,7 @@ data D =
 data Alignment = AlLeft | AlRight | AlCenter
   deriving (Show)
 
-newline Line = Line { unLine :: [D] }
+newtype Line = Line { unLine :: [D] }
 
 instance IsString Doc where
   fromString = text
@@ -156,26 +157,22 @@ groupLines (d:ds) = do
                            SoftSpace:_ -> True
                            _           -> False
   case d of
-    WithColumn f -> do
-      groupLines $ toList (unDoc (f col)) <> ds
-    WithLineLength f -> do
-      groupLines $ toList (unDoc (f linelen)) <> ds
+    WithColumn f -> groupLines $ toList (unDoc (f col)) <> ds
+    WithLineLength f -> groupLines $ toList (unDoc (f linelen)) <> ds
     PushNesting f -> do
       modify $ \st ->
         st{ nesting = f col (N.head (nesting st)) N.<| nesting st }
       groupLines ds
     PopNesting -> do
-      modify $ \st -> st{ nesting = case snd $ N.uncons (nesting st) of
-                                           Nothing   -> nesting st
-                                           Just rest -> rest }
+      modify $ \st -> st{ nesting = fromMaybe (nesting st)
+                              (snd $ N.uncons (nesting st)) }
       groupLines ds
     PushAlignment align' -> do
       modify $ \st -> st{ alignment = align' N.<| alignment st }
       groupLines ds
     PopAlignment -> do
-      modify $ \st -> st{ alignment = case snd $ N.uncons (alignment st) of
-                                             Nothing   -> alignment st
-                                             Just rest -> rest }
+      modify $ \st -> st{ alignment = fromMaybe (alignment st)
+                            (snd $ N.uncons (alignment st)) }
       groupLines ds
     SoftSpace -> do
       unless hasSoftSpace $
@@ -250,7 +247,7 @@ emitLine = do
                  -> let padw = (linelen - w) `div` 2
                     in  (Text padw (T.replicate padw " ") :)
               _                           -> id
-       return $ (Line (lpad printable) :)
+       return (Line (lpad printable) :)
 
 emitBlanks :: Int -> State RenderState ([Line] -> [Line])
 emitBlanks n = do
@@ -405,21 +402,21 @@ leftAligned :: Doc -> Doc
 leftAligned doc =
   single (PushAlignment AlLeft) <>
   doc <>
-  single (PopAlignment)
+  single PopAlignment
 
 -- | Align right.
 rightAligned :: Doc -> Doc
 rightAligned doc =
   single (PushAlignment AlRight) <>
   doc <>
-  single (PopAlignment)
+  single PopAlignment
 
 -- | Align right.
 centerAligned :: Doc -> Doc
 centerAligned doc =
   single (PushAlignment AlCenter) <>
   doc <>
-  single (PopAlignment)
+  single PopAlignment
 
 -- | Chomps trailing blank space off of a 'Doc'.
 chomp :: Doc -> Doc
@@ -435,7 +432,7 @@ nestle :: Doc -> Doc
 nestle (Doc ds) =
   case Seq.viewl ds of
     Newline    Seq.:< rest  -> nestle (Doc rest)
-    (Blanks _) Seq.:< rest  -> nestle (Doc rest)
+    Blanks _ Seq.:< rest    -> nestle (Doc rest)
     _                       -> Doc ds
 
 -- | True if the document is empty.
