@@ -50,12 +50,15 @@ benchmark doclayout-bench
   Type:            exitcode-stdio-1.0
   Main-Is:         bench.hs
   Hs-Source-Dirs:  bench
+  other-modules:   Text.Pandoc.Pretty
   Build-Depends:   doclayout,
                    base >= 4.8 && < 5,
+                   criterion >= 1.0 && < 1.6,
                    filepath,
                    text,
                    containers,
-                   criterion >= 1.0 && < 1.6
+                   mtl,
+                   unordered-containers
   Ghc-Options:   -rtsopts -Wall -fno-warn-unused-do-bind
   Default-Language: Haskell2010
 
