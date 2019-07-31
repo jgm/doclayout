@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-
@@ -73,6 +74,10 @@ import Control.Monad.State.Strict
 import qualified Data.Text.Lazy.Builder as B
 import Data.Text.Lazy.Builder (Builder)
 import Data.Foldable (toList)
+#if MIN_VERSION_base(4,11,0)
+#else
+import Data.Semigroup (Semigroup)
+#endif
 
 newtype Doc = Doc{ unDoc :: Seq D }
   deriving (Semigroup, Monoid)
