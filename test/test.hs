@@ -26,8 +26,20 @@ tests =
   , testCase "breaking space before empty box" $
       render Nothing ("a" <> space <> box 3 mempty)
       @?= "a"
+  , testCase "centered" $
+      render (Just 10) (alignCenter "hi\nlo")
+      @?= "    hi\n    lo"
   , testCase "vfill" $
       render Nothing (vfill "|" <> box 2 (vcat $ replicate 4 "aa") <>
                       vfill "|")
       @?= "|aa|\n|aa|\n|aa|\n|aa|"
+  , testCase "aligned" $
+      render Nothing ("aa" <> aligned ("bb" $$ "cc") <> "dd")
+      @?= "aabb\n  ccdd"
+  , testCase "align with box" $
+      render Nothing ("aa" <> box 2 ("bb" $$ "cc") <> "dd")
+      @?= "aabbdd\n  cc"
+  , testCase "centered box" $
+      render Nothing ("aa" <> box 4 (alignCenter $ "bb" $$ "cc") <> "dd")
+      @?= "aa bb dd\n   cc"
   ]

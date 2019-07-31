@@ -244,16 +244,17 @@ emitLine = do
        let printable = reverse (dropWhile isSoftSpace curline)
        let printableWidth = foldr ((+) . dLength) 0 printable
        mbLineLength <- gets lineLength
-       let lpad =
+       let pad =
             case (align', mbLineLength, printableWidth) of
               (AlRight, Just linelen, w) | w > 0
                  -> let padw = linelen - w
                     in  (Text padw (T.replicate padw " ") :)
               (AlCenter, Just linelen, w) | w > 0
                  -> let padw = (linelen - w) `div` 2
-                    in  (Text padw (T.replicate padw " ") :)
+                    in  (Text padw (T.replicate padw " ") :) .
+                        (++ (replicate padw SoftSpace))
               _                           -> id
-       return (Line (lpad printable) :)
+       return (Line (pad printable) :)
 
 emitBlanks :: Int -> State RenderState ([Line] -> [Line])
 emitBlanks n = do
