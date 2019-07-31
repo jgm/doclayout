@@ -464,6 +464,7 @@ isEmpty = all (not . isPrinting) . unDoc
     isPrinting Text{} = True
     isPrinting VFill{} = True
     isPrinting Blanks{} = True
+    isPrinting (Box _ d) = not (isEmpty d)
     isPrinting _ = False
 
 -- | The empty document.

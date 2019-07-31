@@ -20,6 +20,8 @@ tests =
       render (Just 4) ("hello" <+> "there") @?= "hello\nthere"
   , testCase "nontrivial empty doc" $
       isEmpty (nest 5 (alignCenter empty)) @?= True
+  , testCase "nontrivial nonempty doc" $
+      isEmpty (box 1 (text "a")) @?= False
   , testCase "prefixed with multi paragraphs" $
       render (Just 80) (prefixed ">" ("foo" <> cr <> "bar" <> blankline <> "baz"))
       @?= ">foo\n>bar\n>\n>baz"
