@@ -7,4 +7,7 @@ bench:
 clean:
 	stack clean
 
-.PHONY: all clean bench
+repl:
+	stack ghci src/Text/DocLayout.hs --ghc-options=-XOverloadedStrings
+
+.PHONY: all clean bench repl

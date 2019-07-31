@@ -421,26 +421,23 @@ rblock w doc = box w (alignRight doc)
 cblock :: Int -> Doc -> Doc
 cblock w doc = box w (alignCenter doc)
 
+-- Note: we need cr in these definitions, or the last line
+-- gets the wrong alignment:
+
 -- | Align left.
 alignLeft :: Doc -> Doc
 alignLeft doc =
-  single (PushAlignment AlLeft) <>
-  doc <>
-  single PopAlignment
+  single (PushAlignment AlLeft) <> doc <> cr <> single PopAlignment
 
 -- | Align right.
 alignRight :: Doc -> Doc
 alignRight doc =
-  single (PushAlignment AlRight) <>
-  doc <>
-  single PopAlignment
+  single (PushAlignment AlRight) <> doc <> cr <> single PopAlignment
 
 -- | Align right.
 alignCenter :: Doc -> Doc
 alignCenter doc =
-  single (PushAlignment AlCenter) <>
-  doc <>
-  single PopAlignment
+  single (PushAlignment AlCenter) <> doc <> cr <> single PopAlignment
 
 -- | Chomps trailing blank space off of a 'Doc'.
 chomp :: Doc -> Doc
@@ -459,19 +456,15 @@ nestle (Doc ds) =
     Blanks _ Seq.:< rest    -> nestle (Doc rest)
     _                       -> Doc ds
 
--- | True if the document is empty.  A document with
--- non-printing directives like 'PopNesting' counts as
--- empty.  So @isEmpty (nest 5 empty) == True@.
+-- | True if the document is empty.  A document counts as
+-- empty if it would render empty. So @isEmpty (nest 5 empty) == True@.
 isEmpty :: Doc -> Bool
-isEmpty = all isDirective . unDoc
+isEmpty = all (not . isPrinting) . unDoc
   where
-    isDirective PushNesting{} = True
-    isDirective PopNesting = True
-    isDirective WithColumn{} = True
-    isDirective WithLineLength{} = True
-    isDirective PushAlignment{} = True
-    isDirective PopAlignment = True
-    isDirective _ = False
+    isPrinting Text{} = True
+    isPrinting VFill{} = True
+    isPrinting Blanks{} = True
+    isPrinting _ = False
 
 -- | The empty document.
 empty :: Doc
