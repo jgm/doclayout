@@ -68,7 +68,7 @@ import Control.Monad (unless)
 import Data.String
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
-import Data.List (foldl', transpose)
+import Data.List (foldl', transpose, intersperse)
 import Control.Monad.State.Strict
 import qualified Data.Text.Lazy.Builder as B
 import Data.Text.Lazy.Builder (Builder)
@@ -119,6 +119,7 @@ data RenderState = RenderState{
 -- | Render a Doc with an optional width.
 render :: Maybe Int -> Doc -> Text
 render linelen = TL.toStrict . B.toLazyText . mconcat .
+                 intersperse (B.singleton '\n') .
                  map buildLine .  snd .  buildLines linelen
 
 -- | Returns (width, height) of Doc.
@@ -302,7 +303,7 @@ dLength _          = 0
 
 -- Render a line.
 buildLine :: Line -> Builder
-buildLine (Line ds) = mconcat (map buildD ds) <> "\n"
+buildLine (Line ds) = mconcat (map buildD ds)
  where
    buildD (Text _ t) = B.fromText t
    buildD (VFill _ t) = B.fromText t
