@@ -85,9 +85,9 @@ newtype Doc = Doc{ unDoc :: Seq D }
   deriving (Semigroup, Monoid, Show)
 
 data D =
-    Text !Int !Text      -- ^ text with real width, does not break, no newline
-  | VFill !Int !Text     -- ^ like text, but repeats to fill vertically
-                         -- when adjacent to a block
+    Text Fill !Int !Text -- ^ text with real width, does not break, no '\n'.
+                         -- if Fill is VFill, this will fill vertically
+                         -- when adjacent to a multiline block.
   | Newline              -- ^ newline
   | SoftSpace            -- ^ space or newline depending on context
   | PushNesting (Int -> Int -> Int)
@@ -106,8 +106,7 @@ data D =
   | PopAlignment        -- ^ revert to previous alignment
 
 instance Show D where
-  show (Text n s) = "Text " ++ show n ++ " " ++ show s
-  show (VFill n s) = "VFill " ++ show n ++ " " ++ show s
+  show (Text f n s) = "Text " ++ show f ++ " " ++ show n ++ " " ++ show s
   show Newline = "Newline"
   show SoftSpace = "SoftSpace"
   show (PushNesting _) = "PushNesting <function>"
@@ -118,6 +117,9 @@ instance Show D where
   show (WithLineLength _) = "WithLineLength <function>"
   show (PushAlignment al) = "PushAlignment " ++ show al
   show PopAlignment = "PopAlignment"
+
+data Fill = VFill | NoFill
+  deriving (Show)
 
 data Alignment = AlLeft | AlRight | AlCenter
   deriving (Show)
@@ -206,14 +208,7 @@ groupLines (d:ds) = do
       f <- emitLine
       g <- emitBlanks n
       f . g <$> groupLines ds
-    Text len _
-      | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
-          addToCurrentLine d
-          groupLines ds
-      | otherwise -> do
-          f <- emitLine
-          f <$> groupLines (d:ds)
-    VFill len _
+    Text _ len _
       | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
           addToCurrentLine d
           groupLines ds
@@ -239,16 +234,14 @@ addToCurrentLine d = do
         case d of
           SoftSpace -> curline
           _ | null curline ->
-                 [Text nest' (T.replicate nest' " ")]
+                 [Text NoFill nest' (T.replicate nest' " ")]
             | otherwise -> curline
   col <- gets column
   linelen <- gets lineLength
   let newcol = col + dLength d
   let d' = case (linelen, d) of
-             (Just l, Text _ t) | newcol > l ->
-                   Text (newcol - l) (T.take (l - col) t)
-             (Just l, VFill _ t) | newcol > l ->
-                   VFill (newcol - l) (T.take (l - col) t)
+             (Just l, Text v _ t) | newcol > l ->
+                   Text v (newcol - l) (T.take (l - col) t)
              _ -> d
   modify $ \st -> st{ currentLine = d' : curline'
                     , column = newcol }
@@ -284,11 +277,11 @@ emitLine = do
                     in  (++ (replicate padw SoftSpace))
               (AlCenter, Just linelen, w) | w > 0
                  -> let padw = (linelen - w) `div` 2
-                    in  (Text padw (T.replicate padw " ") :) .
+                    in  (Text NoFill padw (T.replicate padw " ") :) .
                         (++ (replicate padw SoftSpace))
               (AlRight, Just linelen, w) | w > 0
                  -> let padw = linelen - w
-                    in  (Text padw (T.replicate padw " ") :)
+                    in  (Text NoFill padw (T.replicate padw " ") :)
               _                           -> id
        return (Line (pad printable) :)
 
@@ -331,23 +324,23 @@ handleBoxes (Line ds : ls)
   padBox (w, d, ls') num
     | d < maxdepth = ls' ++ replicate (maxdepth - d)
                              (case ls' of
-                               [[VFill _ t]] -> [VFill w t]
+                               [[Text VFill _ t]] -> [Text VFill w t]
                                _ | num == numboxes -> []
-                                 | otherwise -> [Text w (T.replicate w " ")])
+                                 | otherwise ->
+                                     [Text NoFill w (T.replicate w " ")])
     | otherwise    = ls'
 
 dLength :: D -> Int
-dLength (Text n _) = n
-dLength SoftSpace  = 1
-dLength (Box n _)  = n
-dLength _          = 0
+dLength (Text _ n _) = n
+dLength SoftSpace    = 1
+dLength (Box n _)    = n
+dLength _            = 0
 
 -- Render a line.
 buildLine :: Line -> Builder
 buildLine (Line ds) = mconcat (map buildD $ dropTrailingSoftSpaces ds)
  where
-   buildD (Text _ t) = B.fromText t
-   buildD (VFill _ t) = B.fromText t
+   buildD (Text _ _ t) = B.fromText t
    buildD SoftSpace  = B.fromText " "
    buildD _ = mempty
    dropTrailingSoftSpaces = reverse .  dropWhile isSoftSpace . reverse
@@ -382,18 +375,19 @@ text = Doc . toChunks
         toChunks s =
            case break (=='\n') s of
              ([], _:ys) -> Newline Seq.<| toChunks ys
-             (xs, _:ys) -> Text (realLength xs) (T.pack xs) Seq.<|
+             (xs, _:ys) -> Text NoFill (realLength xs) (T.pack xs) Seq.<|
                                (Newline Seq.<| toChunks ys)
-             (xs, [])   -> Seq.singleton $ Text (realLength xs) (T.pack xs)
+             (xs, [])   -> Seq.singleton $
+                              Text NoFill (realLength xs) (T.pack xs)
 
 -- | A string that fills vertically next to a block; may not
 -- contain \n.
 vfill :: String -> Doc
-vfill xs = single (VFill (realLength xs) (T.pack xs))
+vfill xs = single (Text VFill (realLength xs) (T.pack xs))
 
 -- | A character.
 char :: Char -> Doc
-char c = single $ Text (charWidth c) (T.singleton c)
+char c = single $ Text NoFill (charWidth c) (T.singleton c)
 
 -- | Returns the width of a 'Doc' (without reflowing).
 offset :: Doc -> Int
@@ -498,7 +492,6 @@ isEmpty :: Doc -> Bool
 isEmpty = all (not . isPrinting) . unDoc
   where
     isPrinting Text{} = True
-    isPrinting VFill{} = True
     isPrinting Blanks{} = True
     isPrinting (Box _ d) = not (isEmpty d)
     isPrinting _ = False
@@ -554,7 +547,7 @@ vsep = foldr ($+$) empty
 -- | Makes a 'Doc' non-reflowable.
 nowrap :: Doc -> Doc
 nowrap (Doc ds) = Doc $ fmap replaceSpace ds
-  where replaceSpace SoftSpace = Text 1 " "
+  where replaceSpace SoftSpace = Text NoFill 1 " "
         replaceSpace x         = x
 
 -- | Makes a 'Doc' flush against the left margin.
