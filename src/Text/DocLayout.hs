@@ -241,6 +241,8 @@ addToCurrentLine d = do
   let newcol = col + dLength d
   let d' = case (linelen, d) of
              (Just l, Text v _ t) | newcol > l ->
+                   -- TODO: replace this with something
+                   -- sensitive to charWidth:
                    Text v (newcol - l) (T.take (l - col) t)
              _ -> d
   modify $ \st -> st{ currentLine = d' : curline'
