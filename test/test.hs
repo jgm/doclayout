@@ -51,4 +51,8 @@ tests =
   , testCase "centered box" $
       render Nothing ("aa" <> box 4 (alignCenter $ "bb" $$ "cc") <> "dd")
       @?= ("aa bb dd\n   cc" :: Text)
+
+  , testCase "blanks at beginning" $
+      render Nothing (blanklines 2 <> "aa")
+      @?= ("aa" :: Text)
   ]

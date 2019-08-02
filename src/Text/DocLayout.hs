@@ -135,7 +135,7 @@ data RenderState = RenderState{
        , nesting     :: N.NonEmpty Int
        , alignment   :: N.NonEmpty Alignment
        , lineLength  :: Maybe Int  -- ^ 'Nothing' means no wrapping
-       , blanks      :: !Int       -- ^ Number of preceding blank lines
+       , blanks      :: Maybe Int  -- ^ Number of preceding blank lines
        , currentLine :: [D]
        , actualWidth :: Int        -- ^ Actual max line width
        }
@@ -166,7 +166,7 @@ startingState linelen =
              , nesting = N.fromList [0]
              , alignment = N.fromList [AlLeft]
              , lineLength = linelen
-             , blanks = 0
+             , blanks = Nothing
              , currentLine = mempty
              , actualWidth = 0
              }
@@ -262,7 +262,7 @@ emitLine = do
   if null printable
      then return id
      else do
-       modify $ \st -> st{ blanks = 0 }
+       modify $ \st -> st{ blanks = Just 0 }
        let printableWidth = foldr ((+) . dLength) 0 printable
        mbLineLength <- gets lineLength
        let pad =
@@ -283,15 +283,18 @@ emitLine = do
 emitBlanks :: Int -> State RenderState ([Line] -> [Line])
 emitBlanks n = do
   nest' N.:| _ <- gets nesting
-  bls <- gets blanks
-  let blsNeeded = n - bls
-  if blsNeeded > 0
-     then do
-       modify $ \st -> st { currentLine = []
-                          , column = nest'
-                          , blanks = bls + 1 }
-       ((Line []:) .) <$> emitBlanks n
-     else return id
+  mbbls <- gets blanks
+  case mbbls of
+    Nothing -> return id -- at beginning of document, don't add blanks
+    Just bls -> do
+      let blsNeeded = n - bls
+      if blsNeeded > 0
+         then do
+           modify $ \st -> st { currentLine = []
+                              , column = nest'
+                              , blanks = Just $ bls + 1 }
+           ((Line []:) .) <$> emitBlanks n
+         else return id
 
 isSoftSpace :: D -> Bool
 isSoftSpace SoftSpace = True
