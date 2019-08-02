@@ -23,6 +23,10 @@ tests =
       render (Just 10) (hsep ["hello", "there", "this", "is", "a", "test"])
       @?= ("hello\nthere this\nis a test" :: String)
 
+  , testCase "simple box wrapping" $
+      render (Just 50) (box 3 "aa" <> box 3 "bb" <> box 3 ("aa" <+> "bbbb"))
+      @?= ("aa bb aa\n      bbbb" :: Text)
+
   , testCase "nontrivial empty doc" $
       isEmpty (nest 5 (alignCenter empty))
       @?= True
