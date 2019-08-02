@@ -80,7 +80,8 @@ import Data.String.Conversions (ConvertibleStrings(..), LazyText)
 #else
 import Data.Semigroup (Semigroup)
 #endif
-import Debug.Trace
+
+--import Debug.Trace
 
 newtype Doc = Doc{ unDoc :: Seq D }
   deriving (Semigroup, Monoid, Show)
@@ -205,7 +206,8 @@ groupLines (d:ds) = do
       groupLines ds
     SoftSpace -> do
       unless hasSoftSpace $
-        modify $ \st -> st{ currentLine = d : currentLine st }
+        modify $ \st -> st{ currentLine = d : currentLine st
+                          , column = column st + 1 }
       groupLines ds
     Blanks n -> do
       f <- emitLine
@@ -232,7 +234,7 @@ groupLines (d:ds) = do
           if actualw > actualWidth st
              then actualw
              else actualWidth st }
-      let ls' = traceShowId $ reverse . dropWhile (null . unLine) . reverse $ traceShowId ls
+      let ls' = reverse . dropWhile (null . unLine) . reverse $ ls
       (ls' ++) <$> groupLines ds
     Newline -> do
           f <- emitLine

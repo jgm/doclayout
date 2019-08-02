@@ -11,9 +11,17 @@ main = defaultMain $ testGroup "Tests" tests
 
 tests :: [TestTree]
 tests =
-  [ testCase "simple text with truncation" $
+  [ testCase "simple text above line length" $
       render (Just 4) ("hello" <+> "there")
       @?= ("hello\nthere" :: String)
+
+  , testCase "cr" $
+      render (Just 60) ("hello" <> cr <> "there")
+      @?= ("hello\nthere" :: String)
+
+  , testCase "wrapping" $
+      render (Just 10) (hsep ["hello", "there", "this", "is", "a", "test"])
+      @?= ("hello\nthere this\nis a test" :: String)
 
   , testCase "nontrivial empty doc" $
       isEmpty (nest 5 (alignCenter empty))
