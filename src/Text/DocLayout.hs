@@ -237,19 +237,12 @@ addToCurrentLine d = do
                  [Text NoFill nest' (T.replicate nest' " ")]
             | otherwise -> curline
   col <- gets column
-  linelen <- gets lineLength
   let newcol = col + dLength d
-  let d' = case (linelen, d) of
-             (Just l, Text v _ t) | newcol > l ->
-                   -- TODO: replace this with something
-                   -- sensitive to charWidth:
-                   Text v (newcol - l) (T.take (l - col) t)
-             _ -> d
-  modify $ \st -> st{ currentLine = d' : curline'
+  modify $ \st -> st{ currentLine = d : curline'
                     , column = newcol }
                     -- note, newcol may be over line length if
-                    -- we had truncation. that is intended, so
-                    -- that getDimensions can pick up proper
+                    -- we could not fit the content.
+                    -- getDimensions can pick up actual
                     -- dimensions.
 
 emitLine :: State RenderState ([Line] -> [Line])

@@ -13,7 +13,7 @@ tests :: [TestTree]
 tests =
   [ testCase "simple text with truncation" $
       render (Just 4) ("hello" <+> "there")
-      @?= ("hell\nther" :: String)
+      @?= ("hello\nthere" :: String)
 
   , testCase "nontrivial empty doc" $
       isEmpty (nest 5 (alignCenter empty))
