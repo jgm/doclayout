@@ -80,6 +80,7 @@ import Data.String.Conversions (ConvertibleStrings(..), LazyText)
 #else
 import Data.Semigroup (Semigroup)
 #endif
+import Debug.Trace
 
 newtype Doc = Doc{ unDoc :: Seq D }
   deriving (Semigroup, Monoid, Show)
@@ -100,6 +101,7 @@ data D =
                          -- but do not add additional ones if there are
   | Box !Int Doc         -- ^ lay out the document with the given width,
                          -- and treat it as an indivisible unit
+  | Chomp Doc            -- ^ remove trailing newlines from document
   | WithColumn (Int -> Doc) -- ^ output conditional on column number
   | WithLineLength (Maybe Int -> Doc) -- ^ output conditional on line length
   | PushAlignment Alignment -- ^ set alignment
@@ -113,6 +115,7 @@ instance Show D where
   show PopNesting = "PopNesting"
   show (Blanks n) = "Blanks " ++ show n
   show (Box n d) = "Box " ++ show n ++ " " ++ show d
+  show (Chomp d) = "Chomp " ++ show d
   show (WithColumn _) = "WithColumn <function>"
   show (WithLineLength _) = "WithLineLength <function>"
   show (PushAlignment al) = "PushAlignment " ++ show al
@@ -222,6 +225,15 @@ groupLines (d:ds) = do
       | otherwise -> do
           f <- emitLine
           f <$> groupLines (d:ds)
+    Chomp doc -> do
+      let (actualw, ls) = buildLines linelen doc
+      modify $ \st -> st{
+        actualWidth =
+          if actualw > actualWidth st
+             then actualw
+             else actualWidth st }
+      let ls' = traceShowId $ reverse . dropWhile (null . unLine) . reverse $ traceShowId ls
+      (ls' ++) <$> groupLines ds
     Newline -> do
           f <- emitLine
           f <$> groupLines ds
@@ -233,7 +245,8 @@ addToCurrentLine d = do
   let curline' =
         case d of
           SoftSpace -> curline
-          _ | null curline ->
+          _ | null curline
+            , nest' > 0 ->
                  [Text NoFill nest' (T.replicate nest' " ")]
             | otherwise -> curline
   col <- gets column
@@ -469,12 +482,7 @@ alignCenter doc =
 
 -- | Chomps trailing blank space off of a 'Doc'.
 chomp :: Doc -> Doc
-chomp (Doc ds) =
-  case Seq.viewr ds of
-    rest Seq.:> Newline   -> chomp (Doc rest)
-    rest Seq.:> Blanks _  -> chomp (Doc rest)
-    rest Seq.:> SoftSpace -> chomp (Doc rest)
-    _                     -> Doc ds
+chomp doc = single (Chomp doc)
 
 -- | Removes leading blank lines from a 'Doc'.
 nestle :: Doc -> Doc
