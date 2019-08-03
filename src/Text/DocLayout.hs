@@ -211,7 +211,9 @@ groupLines (d:ds) = do
       groupLines ds
     Blanks n -> do
       f <- emitLine
-      g <- emitBlanks n
+      g <- if null ds  -- don't put blank line at end of doc
+              then return id
+              else emitBlanks n
       f . g <$> groupLines ds
     Text _ len _
       | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
