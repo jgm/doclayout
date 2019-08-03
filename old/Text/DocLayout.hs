@@ -33,6 +33,7 @@ module Text.DocLayout (
      , offset
      , minOffset
      , height
+     , box
      , lblock
      , cblock
      , rblock
@@ -432,6 +433,9 @@ offset d = maximum (0: map realLength (lines $ render Nothing d))
 -- | Returns the minimal width of a 'Doc' when reflowed at breakable spaces.
 minOffset :: Doc -> Int
 minOffset d = maximum (0: map realLength (lines $ render (Just 0) d))
+
+box :: Int -> Doc -> Doc
+box = lblock
 
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left.
