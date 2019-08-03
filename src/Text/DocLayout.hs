@@ -582,7 +582,7 @@ aligned doc =
   single PopNesting
 
 -- | Uses the specified string as a prefix for every line of
--- the argument.
+-- the argument. Final spaces are treated as soft spaces.
 prefixed :: String -> Doc -> Doc
 prefixed pref doc =
   withLineLength $ \mblen ->
@@ -590,7 +590,11 @@ prefixed pref doc =
          case mblen of
            Just l  -> l - realLength pref
            Nothing -> fst (getDimensions Nothing doc) - realLength pref
-    in  vfill pref <> box boxwidth doc
+        (pref', sps) = case span (==' ') (reverse pref) of
+                             (xs, ys) -> (reverse ys,
+                                          mconcat (replicate (length xs)
+                                            space))
+    in  vfill pref' <> sps <> box boxwidth doc
 
 -- | Encloses a 'Doc' inside a start and end 'Doc'.
 inside :: Doc -> Doc -> Doc -> Doc

@@ -36,8 +36,8 @@ tests =
       @?= False
 
   , testCase "prefixed with multi paragraphs" $
-      render (Just 80) (prefixed ">" ("foo" <> cr <> "bar" <> blankline <> "baz"))
-      @?= (">foo\n>bar\n>\n>baz" :: String)
+      render (Just 80) (prefixed "> " ("foo" <> cr <> "bar" <> blankline <> "baz"))
+      @?= ("> foo\n> bar\n>\n> baz" :: String)
 
   , testCase "breaking space before empty box" $
       render Nothing ("a" <> space <> box 3 mempty)
