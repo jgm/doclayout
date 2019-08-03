@@ -204,8 +204,7 @@ groupLines (d:ds) = do
       groupLines ds
     SoftSpace -> do
       unless hasSoftSpace $
-        modify $ \st -> st{ currentLine = d : currentLine st
-                          , column = column st + 1 }
+        addToCurrentLine d
       groupLines ds
     Blanks n -> do
       f <- emitLine
