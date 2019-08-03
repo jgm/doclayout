@@ -60,6 +60,10 @@ tests =
                       vfill "|")
       @?= ("|aa|\n|aa|\n|aa|\n|aa|" :: Text)
 
+  , testCase "nest" $
+      render Nothing (nest 4 "aa\n\nbb\ncc")
+      @?= ("    aa\n\n    bb\n    cc" :: Text)
+
   , testCase "aligned" $
       render Nothing ("aa" <> aligned ("bb" $$ "cc") <> "dd")
       @?= ("aabb\n  ccdd" :: Text)

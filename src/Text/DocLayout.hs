@@ -16,6 +16,7 @@ module Text.DocLayout (
      , blanklines
      , space
      , text
+     , str
      , vfill
      , char
      , box
@@ -370,23 +371,21 @@ blankline = single (Blanks 1)
 blanklines :: Int -> Doc
 blanklines n = single (Blanks n)
 
--- | A literal string.
+-- | A literal string, possibly including newlines.
 text :: String -> Doc
-text = Doc . toChunks
-  where toChunks :: String -> Seq D
-        toChunks [] = mempty
-        toChunks s =
-           case break (=='\n') s of
-             ([], _:ys) -> Newline Seq.<| toChunks ys
-             (xs, _:ys) -> Text NoFill (realLength xs) (T.pack xs) Seq.<|
-                               (Newline Seq.<| toChunks ys)
-             (xs, [])   -> Seq.singleton $
-                              Text NoFill (realLength xs) (T.pack xs)
+text s = case lines s of
+           []  -> mempty
+           [x] -> str x
+           xs  -> mconcat $ intersperse cr (map str xs)
+
+-- | A raw string, assumed not to include newlines.
+str :: String -> Doc
+str s  = single (Text NoFill (realLength s) (T.pack s))
 
 -- | A string that fills vertically next to a block; may not
 -- contain \n.
 vfill :: String -> Doc
-vfill xs = single (Text VFill (realLength xs) (T.pack xs))
+vfill s = single (Text VFill (realLength s) (T.pack s))
 
 -- | A character.
 char :: Char -> Doc
