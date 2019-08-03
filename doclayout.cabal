@@ -39,6 +39,22 @@ test-suite doclayout-test
   build-depends:       base,
                        doclayout,
                        mtl,
+                       containers,
+                       tasty,
+                       tasty-golden,
+                       tasty-hunit,
+                       filepath,
+                       text
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+test-suite olddoclayout-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test, old
+  main-is:             test.hs
+  build-depends:       base,
+                       mtl,
+                       containers,
                        tasty,
                        tasty-golden,
                        tasty-hunit,
@@ -50,7 +66,7 @@ test-suite doclayout-test
 benchmark doclayout-bench
   Type:            exitcode-stdio-1.0
   Main-Is:         bench.hs
-  Hs-Source-Dirs:  bench
+  Hs-Source-Dirs:  bench, old
   other-modules:   Text.Pandoc.Pretty
   Build-Depends:   doclayout,
                    base >= 4.8 && < 5,

@@ -14,7 +14,7 @@ A prettyprinting library for the production of text documents,
 including wrapped text, indentated blocks, and tables.
 -}
 
-module Text.Pandoc.Pretty (
+module Text.DocLayout (
        Doc
      , render
      , cr
