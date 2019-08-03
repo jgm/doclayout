@@ -51,6 +51,7 @@ test-suite doclayout-test
 test-suite olddoclayout-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test, old
+  other-modules:       Text.DocLayout
   main-is:             test.hs
   build-depends:       base,
                        mtl,
@@ -66,10 +67,25 @@ test-suite olddoclayout-test
 benchmark doclayout-bench
   Type:            exitcode-stdio-1.0
   Main-Is:         bench.hs
-  Hs-Source-Dirs:  bench, old
-  other-modules:   Text.Pandoc.Pretty
+  Hs-Source-Dirs:  bench
   Build-Depends:   doclayout,
                    base >= 4.8 && < 5,
+                   criterion >= 1.0 && < 1.6,
+                   filepath,
+                   text,
+                   containers,
+                   mtl,
+                   unordered-containers,
+                   string-conversions
+  Ghc-Options:   -rtsopts -Wall -fno-warn-unused-do-bind
+  Default-Language: Haskell2010
+
+benchmark olddoclayout-bench
+  Type:            exitcode-stdio-1.0
+  Main-Is:         bench.hs
+  Hs-Source-Dirs:  bench, old
+  other-modules:   Text.DocLayout
+  Build-Depends:   base >= 4.8 && < 5,
                    criterion >= 1.0 && < 1.6,
                    filepath,
                    text,
