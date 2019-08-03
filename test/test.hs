@@ -11,7 +11,15 @@ main = defaultMain $ testGroup "Tests" tests
 
 tests :: [TestTree]
 tests =
-  [ testCase "simple text above line length" $
+  [ testCase "simple vcat " $
+      render (Just 10) (vcat $ map chomp ["aaa", "bbb", "ccc"])
+      @?= ("aaa\nbbb\nccc" :: String)
+
+  , testCase "variant" $
+      render (Just 10) ((chomp "aaa") $$ (chomp "bbb") $$ (chomp "ccc"))
+      @?= ("aaa\nbbb\nccc" :: String)
+
+  , testCase "simple text above line length" $
       render (Just 4) ("hello" <+> "there")
       @?= ("hello\nthere" :: String)
 
@@ -79,6 +87,10 @@ tests =
   , testCase "chomp 2" $
       render Nothing (chomp ("aa" <> space) <> "bb")
       @?= ("aabb" :: Text)
+
+  , testCase "chomp 3" $
+      render Nothing (chomp "aa")
+      @?= ("aa" :: Text)
 
   , testCase "chomp with box at end" $
       render Nothing ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
