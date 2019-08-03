@@ -71,4 +71,8 @@ tests =
   , testCase "chomp with box at end" $
       render Nothing ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
       @?= ("aa\naa" :: Text)
+
+  , testCase "empty and $$" $
+      render Nothing ("aa" $$ empty $$ "bb")
+      @?= ("aa\nbb" :: Text)
   ]
