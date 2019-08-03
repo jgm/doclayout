@@ -81,7 +81,7 @@ import Data.String.Conversions (ConvertibleStrings(..), LazyText)
 import Data.Semigroup (Semigroup)
 #endif
 
---import Debug.Trace
+import Debug.Trace
 
 newtype Doc = Doc{ unDoc :: Seq D }
   deriving (Semigroup, Monoid, Show)
@@ -339,8 +339,7 @@ handleBoxes (Line ds : ls)
                              (case ls' of
                                [[Text VFill _ t]] -> [Text VFill w t]
                                _ | num == numboxes -> []
-                                 | otherwise ->
-                                     [Text NoFill w (T.replicate w " ")])
+                                 | otherwise -> replicate w SoftSpace)
     | otherwise    = ls'
 
 dLength :: D -> Int
@@ -351,12 +350,13 @@ dLength _            = 0
 
 -- Render a line.
 buildLine :: Line -> Builder
-buildLine (Line ds) = mconcat (map buildD $ dropTrailingSoftSpaces ds)
+buildLine (Line ds) = fromMaybe mempty $ foldr go Nothing ds
  where
-   buildD (Text _ _ t) = B.fromText t
-   buildD SoftSpace  = B.fromText " "
-   buildD _ = mempty
-   dropTrailingSoftSpaces = reverse .  dropWhile isSoftSpace . reverse
+   go (Text _ _ t) Nothing    = Just (B.fromText t)
+   go (Text _ _ t) (Just acc) = Just (B.fromText t <> acc)
+   go SoftSpace    Nothing    = Nothing -- don't render SoftSpace at end
+   go SoftSpace    (Just acc) = Just (B.fromText " " <> acc)
+   go _ x                     = x
 
 single :: D -> Doc
 single = Doc . Seq.singleton
