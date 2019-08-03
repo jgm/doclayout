@@ -231,13 +231,23 @@ groupLines (d:ds) = do
           f <$> groupLines (d:ds)
     Chomp doc -> do
       let (actualw, ls) = buildLines linelen doc
-      modify $ \st -> st{
-        actualWidth =
-          if actualw > actualWidth st
-             then actualw
-             else actualWidth st }
-      let ls' = reverse . dropWhile (null . unLine) . reverse $ ls
-      (ls' ++) <$> groupLines ds
+      modify $ \st -> st{ actualWidth = if actualw > actualWidth st
+                                           then actualw
+                                           else actualWidth st }
+      let trimSpace [] = []
+          trimSpace (Line []:xs) = trimSpace xs
+          trimSpace (Line xs:ys) =
+            case reverse xs of
+              SoftSpace:_ -> trimSpace $
+               Line (reverse (dropWhile isSoftSpace xs)) : ys
+              _           -> Line xs:ys
+
+      let ls' = trimSpace . reverse $ ls
+      case ls' of
+        []     -> groupLines ds
+        (Line xs:ys) -> do
+          mapM_ addToCurrentLine xs
+          (\zs -> foldr (:) zs ys) <$> groupLines ds
     Newline -> do
           f <- emitLine
           f <$> groupLines ds

@@ -72,6 +72,14 @@ tests =
       render Nothing ("aa" <> blanklines 2)
       @?= ("aa" :: Text)
 
+  , testCase "chomp 1" $
+      render Nothing (chomp (("aa" <> space) <> blankline) <> "bb")
+      @?= ("aabb" :: Text)
+
+  , testCase "chomp 2" $
+      render Nothing (chomp ("aa" <> space) <> "bb")
+      @?= ("aabb" :: Text)
+
   , testCase "chomp with box at end" $
       render Nothing ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
       @?= ("aa\naa" :: Text)
