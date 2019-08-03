@@ -102,7 +102,6 @@ data D =
                          -- but do not add additional ones if there are
   | Box !Int Doc         -- ^ lay out the document with the given width,
                          -- and treat it as an indivisible unit
-  | Chomp Doc            -- ^ remove trailing newlines from document
   | WithColumn (Int -> Doc) -- ^ output conditional on column number
   | WithLineLength (Maybe Int -> Doc) -- ^ output conditional on line length
   | PushAlignment Alignment -- ^ set alignment
@@ -116,7 +115,6 @@ instance Show D where
   show PopNesting = "PopNesting"
   show (Blanks n) = "Blanks " ++ show n
   show (Box n d) = "Box " ++ show n ++ " " ++ show d
-  show (Chomp d) = "Chomp " ++ show d
   show (WithColumn _) = "WithColumn <function>"
   show (WithLineLength _) = "WithLineLength <function>"
   show (PushAlignment al) = "PushAlignment " ++ show al
@@ -229,17 +227,6 @@ groupLines (d:ds) = do
       | otherwise -> do
           f <- emitLine
           f <$> groupLines (d:ds)
-    Chomp doc -> do
-      let (actualw, ls) = traceShowId $ buildLines linelen doc
-      modify $ \st -> st{ actualWidth = if actualw > actualWidth st
-                                           then actualw
-                                           else actualWidth st }
-      case dropWhile (null . unLine) (reverse ls) of
-        []     -> groupLines ds
-        (Line xs:ys) -> do
-          mapM_ addToCurrentLine xs
-          f <- emitLine
-          f . (reverse ys ++) <$> groupLines ds
     Newline -> do
           f <- emitLine
           f <$> groupLines ds
@@ -488,7 +475,12 @@ alignCenter doc =
 
 -- | Chomps trailing blank space off of a 'Doc'.
 chomp :: Doc -> Doc
-chomp doc = single (Chomp doc)
+chomp (Doc ds) =
+  Doc $ Seq.dropWhileR isSpace ds
+    where isSpace SoftSpace = True
+          isSpace Blanks{}  = True
+          isSpace Newline   = True
+          isSpace _         = False
 
 -- | Removes leading blank lines from a 'Doc'.
 nestle :: Doc -> Doc
