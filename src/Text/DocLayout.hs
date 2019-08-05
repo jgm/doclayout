@@ -601,11 +601,12 @@ aligned doc =
 -- the argument. Final spaces are treated as soft spaces.
 prefixed :: String -> Doc -> Doc
 prefixed pref doc =
-  withLineLength $ \mblen ->
+  withColumn $ \col ->
+   withLineLength $ \mblen ->
     let boxwidth =
          case mblen of
-           Just l  -> l - realLength pref
-           Nothing -> fst (getDimensions Nothing doc) - realLength pref
+           Just l  -> l - col - realLength pref
+           Nothing -> fst (getDimensions Nothing doc)
         (pref', sps) = case span (==' ') (reverse pref) of
                              (xs, ys) -> (reverse ys,
                                           mconcat (replicate (length xs)
