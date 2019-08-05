@@ -128,4 +128,8 @@ tests =
                           lblock 3 " | " <> lblock 4 "ff"))
       @?= ("  aa |  bb  | cc\n---- | ---- | ----\n  dd |  ee  | ff\n" :: Text)
 
+  , testCase "getDimensions" $
+     let foo = "A baosnetuh snaothsn aoesnth aoesnth aosenth sentuhaoeu"
+     in getDimensions Nothing (text foo)
+     @?= (length foo, 1)
   ]
