@@ -16,7 +16,7 @@ module Text.DocLayout (
      , blanklines
      , space
      , text
-     , str
+     , lit
      , vfill
      , char
      , box
@@ -376,12 +376,12 @@ blanklines n = single (Blanks n)
 text :: String -> Doc
 text s = case lines s of
            []  -> mempty
-           [x] -> str x
-           xs  -> mconcat $ intersperse cr (map str xs)
+           [x] -> lit x
+           xs  -> mconcat $ intersperse cr (map lit xs)
 
 -- | A raw string, assumed not to include newlines.
-str :: String -> Doc
-str s  = single (Text NoFill (realLength s) (T.pack s))
+lit :: String -> Doc
+lit s  = single (Text NoFill (realLength s) (T.pack s))
 
 -- | A string that fills vertically next to a block; may not
 -- contain \n.
@@ -476,10 +476,14 @@ alignCenter doc =
 chomp :: Doc -> Doc
 chomp (Doc ds) =
   Doc $ Seq.dropWhileR isSpace ds
-    where isSpace SoftSpace = True
-          isSpace Blanks{}  = True
-          isSpace Newline   = True
-          isSpace _         = False
+    where isSpace SoftSpace       = True
+          isSpace Blanks{}        = True
+          isSpace Newline         = True
+          isSpace PopNesting      = True
+          isSpace PushNesting{}   = True
+          isSpace PushAlignment{} = True
+          isSpace PopAlignment    = True
+          isSpace _               = False
 
 -- | Removes leading blank lines from a 'Doc'.
 nestle :: Doc -> Doc

@@ -96,6 +96,14 @@ tests =
       render Nothing (chomp "aa")
       @?= ("aa" :: Text)
 
+  , testCase "chomp with nesting" $
+      render Nothing (chomp (nest 3 ("aa" <> blankline)))
+      @?= ("   aa" :: Text)
+
+  , testCase "chomp with alignment" $
+      render (Just 4) (chomp (alignCenter ("aa" <> blankline)))
+      @?= (" aa" :: Text)
+
   , testCase "chomp with box at end" $
       render Nothing ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
       @?= ("aa\naa" :: Text)
