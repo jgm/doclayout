@@ -443,17 +443,18 @@ resizableBox mbMinWidth mbMaxWidth doc = box width doc
                 min (max minWidth contentWidth) maxWidth
 
 -- | @lblock n d@ is a block of width @n@ characters, with
--- text derived from @d@ and aligned to the left.
+-- text derived from @d@ and aligned to the left.  Also chomps
+-- the included document for backwards compatibility.
 lblock :: Int -> Doc -> Doc
-lblock w doc = box w (alignLeft doc)
+lblock w doc = box w (alignLeft (chomp doc) <> cr)
 
 -- | Like 'lblock' but aligned to the right.
 rblock :: Int -> Doc -> Doc
-rblock w doc = box w (alignRight doc)
+rblock w doc = box w (alignRight (chomp doc) <> cr)
 
 -- | Like 'lblock' but aligned centered.
 cblock :: Int -> Doc -> Doc
-cblock w doc = box w (alignCenter doc)
+cblock w doc = box w (alignCenter (chomp doc) <> cr)
 
 -- Note: we need cr in these definitions, or the last line
 -- gets the wrong alignment:
