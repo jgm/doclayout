@@ -237,6 +237,7 @@ addToCurrentLine d = do
   nest' N.:| _ <- gets nesting
   let curline' =
         case d of
+          Text _ 0 _ -> curline
           SoftSpace -> curline
           _ | null curline
             , nest' > 0 ->
