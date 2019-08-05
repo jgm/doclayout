@@ -147,7 +147,6 @@ data RenderState = RenderState{
 -- | Render a Doc with an optional width.
 render :: ConvertibleStrings LazyText a => Maybe Int -> Doc -> a
 render linelen = convertString . B.toLazyText . mconcat .
-                 intersperse (B.singleton '\n') .
                  map buildLine .  snd .  buildLines linelen
 
 -- | Returns (width, height) of Doc.
@@ -343,7 +342,8 @@ dLength _            = 0
 
 -- Render a line.
 buildLine :: Line -> Builder
-buildLine (Line ds) = fromMaybe mempty $ foldr go Nothing ds
+buildLine (Line ds) = (fromMaybe mempty $ foldr go Nothing ds) <>
+                       B.fromText "\n"
  where
    go (Text _ _ t) Nothing    = Just (B.fromText t)
    go (Text _ _ t) (Just acc) = Just (B.fromText t <> acc)
