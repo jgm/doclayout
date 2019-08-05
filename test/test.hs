@@ -44,8 +44,13 @@ tests =
       @?= False
 
   , testCase "prefixed with multi paragraphs" $
-      render (Just 80) (prefixed "> " ("foo" <> cr <> "bar" <> blankline <> "baz"))
-      @?= ("> foo\n> bar\n>\n> baz" :: String)
+      render (Just 80) (prefixed "> " ("foo" <+> "bar" <> cr <>
+               "baz" <> blankline <> "bim" <+> "bam"))
+      @?= ("> foo bar\n> baz\n>\n> bim bam" :: String)
+
+  , testCase "prefixed with hsep" $
+      render Nothing (prefixed "> " $ hsep ["a","b","c"])
+      @?= ("> a b c" :: Text)
 
   , testCase "breaking space before empty box" $
       render Nothing ("a" <> space <> box 3 mempty)
