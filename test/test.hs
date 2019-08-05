@@ -128,8 +128,12 @@ tests =
                           lblock 3 " | " <> lblock 4 "ff"))
       @?= ("  aa |  bb  | cc\n---- | ---- | ----\n  dd |  ee  | ff\n" :: Text)
 
+  , testCase "proper wrapping with multiple components" $
+      render (Just 10) ("aa" <> space <> "bbbbb" <> "ccccc")
+      @?= ("aa\nbbbbbccccc" :: Text)
+
   , testCase "getDimensions" $
      let foo = "A baosnetuh snaothsn aoesnth aoesnth aosenth sentuhaoeu"
-     in getDimensions Nothing (text foo)
-     @?= (length foo, 1)
+     in getDimensions Nothing (hsep (map text $ words $ foo) <> cr <> "bar")
+     @?= (length foo, 2)
   ]
