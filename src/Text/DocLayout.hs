@@ -280,7 +280,8 @@ emitLine = do
               (AlCenter, Just linelen, w) | w > 0
                  -> let padw = (linelen - w) `div` 2
                     in  (Text NoFill padw (T.replicate padw " ") :) .
-                        (++ (replicate padw SoftSpace))
+                        (++ (replicate (linelen - (padw + printableWidth))
+                               SoftSpace))
               (AlRight, Just linelen, w) | w > 0
                  -> let padw = linelen - w
                     in  (Text NoFill padw (T.replicate padw " ") :)

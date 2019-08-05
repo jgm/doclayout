@@ -52,8 +52,8 @@ tests =
       @?= ("a" :: String)
 
   , testCase "centered" $
-      render (Just 10) (alignCenter "hi\nlo")
-      @?= ("    hi\n    lo" :: String)
+      render (Just 10) (alignCenter "hi\nlow")
+      @?= ("    hi\n   low" :: String)
 
   , testCase "vfill" $
       render Nothing (vfill "|" <> box 2 (vcat $ replicate 4 "aa") <>
