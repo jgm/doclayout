@@ -474,16 +474,18 @@ alignCenter doc =
 
 -- | Chomps trailing blank space off of a 'Doc'.
 chomp :: Doc -> Doc
-chomp (Doc ds) =
-  Doc $ Seq.dropWhileR isSpace ds
-    where isSpace SoftSpace       = True
-          isSpace Blanks{}        = True
-          isSpace Newline         = True
-          isSpace PopNesting      = True
-          isSpace PushNesting{}   = True
-          isSpace PushAlignment{} = True
-          isSpace PopAlignment    = True
-          isSpace _               = False
+chomp (Doc ds) = Doc $ go ds
+  where
+    go ds' =
+      case Seq.viewr ds' of
+        rest Seq.:> SoftSpace       -> go rest
+        rest Seq.:> Blanks{}        -> go rest
+        rest Seq.:> Newline         -> go rest
+        rest Seq.:> PopNesting      -> go rest Seq.|> PopNesting
+        rest Seq.:> PushNesting f   -> go rest Seq.|> PushNesting f
+        rest Seq.:> PopAlignment    -> go rest Seq.|> PopAlignment
+        rest Seq.:> PushAlignment a -> go rest Seq.|> PushAlignment a
+        _                           -> ds'
 
 -- | Removes leading blank lines from a 'Doc'.
 nestle :: Doc -> Doc

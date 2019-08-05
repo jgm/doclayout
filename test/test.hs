@@ -101,8 +101,10 @@ tests =
       @?= ("   aabb\ncc" :: Text)
 
   , testCase "chomp with alignment" $
-      render (Just 4) (chomp (alignCenter ("aa" <> blankline)) <> cr <> "bb")
+      render (Just 4) (chomp (alignCenter ("aa\nbb" <> blankline)))
       @?= (" aa\nbb" :: Text)
+      -- last line is left aligned because we pop alignment before
+      -- the line is emitted
 
   , testCase "chomp with box at end" $
       render Nothing ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
