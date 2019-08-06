@@ -528,10 +528,11 @@ nestle (Doc ds) =
 isEmpty :: Doc -> Bool
 isEmpty = all (not . isPrinting) . unDoc
   where
-    isPrinting Text{} = True
-    isPrinting Blanks{} = True
+    isPrinting Text{}    = True
+    isPrinting Blanks{}  = True
+    isPrinting Newline   = True
     isPrinting (Box _ d) = not (isEmpty d)
-    isPrinting _ = False
+    isPrinting _         = False
 
 -- | The empty document.
 empty :: Doc

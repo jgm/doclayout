@@ -27,6 +27,10 @@ tests =
       render (Just 60) ("hello" <> cr <> "there")
       @?= ("hello\nthere" :: String)
 
+  , testCase "x $$ cr" $
+      render Nothing ("x" $$ cr)
+      @?= ("x\n" :: Text)
+
   , testCase "wrapping" $
       render (Just 10) (hsep ["hello", "there", "this", "is", "a", "test"])
       @?= ("hello\nthere this\nis a test" :: String)
@@ -36,7 +40,7 @@ tests =
       @?= ("aa bb aa\n      bbbb" :: Text)
 
   , testCase "nontrivial empty doc" $
-      isEmpty (nest 5 (alignCenter empty))
+      isEmpty (nest 5 empty)
       @?= True
 
   , testCase "nontrivial nonempty doc" $
