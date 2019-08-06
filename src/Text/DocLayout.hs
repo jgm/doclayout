@@ -140,13 +140,15 @@ instance IsString Doc where
   fromString = text
 
 data RenderState = RenderState{
-         column      :: !Int
-       , nesting     :: N.NonEmpty Int
-       , alignment   :: N.NonEmpty Alignment
-       , lineLength  :: Maybe Int  -- ^ 'Nothing' means no wrapping
-       , blanks      :: Maybe Int  -- ^ Number of preceding blank lines
-       , currentLine :: [D]
-       , actualWidth :: Int        -- ^ Actual max line width
+         column           :: !Int
+       , nesting          :: N.NonEmpty Int
+       , currentNesting   :: Int
+       , currentAlignment :: Alignment
+       , alignment        :: N.NonEmpty Alignment
+       , lineLength       :: Maybe Int  -- ^ 'Nothing' means no wrapping
+       , blanks           :: Maybe Int  -- ^ Number of preceding blank lines
+       , currentLine      :: [D]
+       , actualWidth      :: Int        -- ^ Actual max line width
        }
   deriving (Show)
 
@@ -172,6 +174,8 @@ startingState :: Maybe Int -> RenderState
 startingState linelen =
   RenderState{ column = 0
              , nesting = N.fromList [0]
+             , currentNesting = 0
+             , currentAlignment = AlLeft
              , alignment = N.fromList [AlLeft]
              , lineLength = linelen
              , blanks = Nothing
@@ -195,24 +199,24 @@ groupLines (d:ds) = do
     WithColumn f -> groupLines $ toList (unDoc (f col)) <> ds
     WithLineLength f -> groupLines $ toList (unDoc (f linelen)) <> ds
     PushNesting f -> do
+      oldnesting <- N.head <$> gets nesting
+      let newnesting = f col oldnesting
       modify $ \st ->
-        st{ nesting = f col (N.head (nesting st)) N.<| nesting st }
+        st{ nesting = newnesting N.<| nesting st
+          , currentNesting = newnesting }
       groupLines ds
     PopNesting -> do
-      f <- emitLine True
-      f <$> do
-        modify $ \st -> st{ nesting = fromMaybe (nesting st)
+      modify $ \st -> st{ nesting = fromMaybe (nesting st)
                                 (snd $ N.uncons (nesting st)) }
-        groupLines ds
+      groupLines ds
     PushAlignment align' -> do
-      modify $ \st -> st{ alignment = align' N.<| alignment st }
+      modify $ \st -> st{ alignment = align' N.<| alignment st
+                        , currentAlignment = align' }
       groupLines ds
     PopAlignment -> do
-      f <- emitLine True
-      f <$> do
-        modify $ \st -> st{ alignment = fromMaybe (alignment st)
+      modify $ \st -> st{ alignment = fromMaybe (alignment st)
                             (snd $ N.uncons (alignment st)) }
-        groupLines ds
+      groupLines ds
     SoftSpace
       | maybe False (col >) linelen -> do
           f <- emitLine True
@@ -239,7 +243,7 @@ groupLines (d:ds) = do
 addToCurrentLine :: D -> State RenderState ()
 addToCurrentLine d = do
   curline <- gets currentLine
-  nest' N.:| _ <- gets nesting
+  nest' <- gets currentNesting
   let curline' =
         case d of
           Text _ 0 _ -> curline
@@ -259,7 +263,7 @@ addToCurrentLine d = do
 
 emitLine :: Bool -> State RenderState ([Line] -> [Line])
 emitLine addNewline = do
-  align' N.:| _ <- gets alignment
+  align' <- gets currentAlignment
   curline <- gets currentLine
   let revline = dropWhile isSoftSpace curline
   let (revnext, revthis) = break isSoftSpace revline
@@ -267,7 +271,7 @@ emitLine addNewline = do
   col <- case curline of
            SoftSpace:_ -> (\x -> x - 1) <$> gets column
            _           -> gets column
-  nest' N.:| _ <- gets nesting
+  nest' <- gets currentNesting
   printable <-
     if maybe True (col <=) mbLineLen
        then do
@@ -289,7 +293,11 @@ emitLine addNewline = do
   modify $ \st -> st{ actualWidth =
                        if printableWidth > actualWidth st
                           then printableWidth
-                          else actualWidth st }
+                          else actualWidth st
+                    , currentNesting =
+                       N.head (nesting st)
+                    , currentAlignment =
+                       N.head (alignment st) }
   if null printable
      then return id
      else do

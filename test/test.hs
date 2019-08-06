@@ -71,11 +71,11 @@ tests =
 
   , testCase "nest" $
       render Nothing (nest 4 "aa\n\nbb\ncc")
-      @?= ("    aa\n\n    bb\n    cc\n" :: Text)
+      @?= ("    aa\n\n    bb\n    cc" :: Text)
 
   , testCase "aligned" $
       render Nothing ("aa" <> aligned ("bb" $$ "cc") <> "dd")
-      @?= ("aabb\n  cc\ndd" :: Text)
+      @?= ("aabb\n  ccdd" :: Text)
 
   , testCase "align with box" $
       render Nothing ("aa" <> box 2 ("bb" $$ "cc") <> "dd")
@@ -107,11 +107,11 @@ tests =
 
   , testCase "chomp with nesting" $
       render Nothing (chomp (nest 3 ("aa" <> blankline)) <> "bb")
-      @?= ("   aa\nbb" :: Text)
+      @?= ("   aabb" :: Text)
 
   , testCase "chomp with alignment" $
       render (Just 4) (chomp (alignCenter ("aa\nbb" <> blankline)))
-      @?= (" aa\n bb\n" :: Text)
+      @?= (" aa\n bb" :: Text)
 
   , testCase "chomp with box at end" $
       render Nothing ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
@@ -145,5 +145,5 @@ tests =
 
   , testCase "aligned wrapped text" $
      render Nothing (cblock 7 ("hi" <+> "there"))
-     @?= ("  hi\n there\n" :: Text)
+     @?= ("  hi\n there" :: Text)
   ]
