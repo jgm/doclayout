@@ -200,17 +200,19 @@ groupLines (d:ds) = do
       groupLines ds
     PopNesting -> do
       f <- emitLine True
-      modify $ \st -> st{ nesting = fromMaybe (nesting st)
-                              (snd $ N.uncons (nesting st)) }
-      f <$> groupLines ds
+      f <$> do
+        modify $ \st -> st{ nesting = fromMaybe (nesting st)
+                                (snd $ N.uncons (nesting st)) }
+        groupLines ds
     PushAlignment align' -> do
       modify $ \st -> st{ alignment = align' N.<| alignment st }
       groupLines ds
     PopAlignment -> do
       f <- emitLine True
-      modify $ \st -> st{ alignment = fromMaybe (alignment st)
+      f <$> do
+        modify $ \st -> st{ alignment = fromMaybe (alignment st)
                             (snd $ N.uncons (alignment st)) }
-      f <$> groupLines ds
+        groupLines ds
     SoftSpace
       | maybe False (col >) linelen -> do
           f <- emitLine True
@@ -274,8 +276,9 @@ emitLine addNewline = do
          return $ reverse revline
        else case revthis of
          _:xs -> do
+           let nestPadding = [Text NoFill nest' (T.replicate nest' " ")]
            modify $ \st ->
-             st{ currentLine = revnext
+             st{ currentLine = revnext ++ nestPadding
                , column = nest' + foldr ((+) . dLength) 0 revnext }
            return $ reverse xs
          [] -> do
