@@ -183,14 +183,16 @@ startingState linelen =
 
 -- Group Ds into lines.
 groupLines :: [D] -> State RenderState [Line]
-groupLines [] = ($ []) <$> emitLine False
+groupLines [] = do
+  f <- emitLine False
+  curline <- gets currentLine
+  if null curline
+     then return $ f []
+     else f <$> groupLines []
 groupLines (d:ds) = do
   linelen <- gets lineLength
   col <- gets column
   curline <- gets currentLine
-  let hasSoftSpace = case curline of
-                           SoftSpace:_ -> True
-                           _           -> False
   case d of
     WithColumn f -> groupLines $ toList (unDoc (f col)) <> ds
     WithLineLength f -> groupLines $ toList (unDoc (f linelen)) <> ds
@@ -209,33 +211,29 @@ groupLines (d:ds) = do
       modify $ \st -> st{ alignment = fromMaybe (alignment st)
                             (snd $ N.uncons (alignment st)) }
       groupLines ds
-    SoftSpace -> do
-      unless hasSoftSpace $
+    SoftSpace
+      | maybe False (col >) linelen -> do
+          addToCurrentLine d
+          f <- emitLine True
+          f <$> groupLines ds
+      | otherwise -> do
         addToCurrentLine d
-      groupLines ds
+        groupLines ds
     Blanks n -> do
       f <- emitLine True
       g <- if null ds  -- don't put blank line at end of doc
               then return id
               else emitBlanks n
       f . g <$> groupLines ds
-    Text _ len _
-      | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
-          addToCurrentLine d
-          groupLines ds
-      | otherwise -> do
-          f <- emitLine True
-          f <$> groupLines (d:ds)
-    Box len _doc
-      | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
-          addToCurrentLine d
-          groupLines ds
-      | otherwise -> do
-          f <- emitLine True
-          f <$> groupLines (d:ds)
+    Text _ len _ -> do
+      addToCurrentLine d
+      groupLines ds
+    Box len _doc -> do
+      addToCurrentLine d
+      groupLines ds
     Newline -> do
-          f <- emitLine True
-          f <$> groupLines ds
+      f <- emitLine True
+      f <$> groupLines ds
 
 addToCurrentLine :: D -> State RenderState ()
 addToCurrentLine d = do
@@ -262,21 +260,38 @@ emitLine :: Bool -> State RenderState ([Line] -> [Line])
 emitLine addNewline = do
   align' N.:| _ <- gets alignment
   curline <- gets currentLine
-  col <- gets column
+  let revline = dropWhile isSoftSpace curline
+  let (revnext, revthis) = break isSoftSpace revline
+  mbLineLen <- gets lineLength
+  col <- case curline of
+           SoftSpace:_ -> (\x -> x - 1) <$> gets column
+           _           -> gets column
   nest' N.:| _ <- gets nesting
-  modify $ \st -> st{ currentLine = []
-                    , column = nest'
-                    , actualWidth =
-                       if col > actualWidth st
-                          then col
-                          else actualWidth st
-                    }
-  let printable = reverse (dropWhile isSoftSpace curline)
+  printable <-
+    if maybe True (col <=) mbLineLen
+       then do
+         modify $ \st -> st{ currentLine = []
+                           , column = nest' }
+         return $ reverse revline
+       else case revthis of
+         _:xs -> do
+           modify $ \st ->
+             st{ currentLine = revnext
+               , column = nest' + foldr ((+) . dLength) 0 revnext }
+           return $ reverse xs
+         [] -> do
+           modify $ \st -> st{ currentLine = []
+                             , column = nest' }
+           return $ reverse revline -- no soft space, emit overlong
+  let printableWidth = foldr ((+) . dLength) 0 printable
+  modify $ \st -> st{ actualWidth =
+                       if printableWidth > actualWidth st
+                          then printableWidth
+                          else actualWidth st }
   if null printable
      then return id
      else do
        modify $ \st -> st{ blanks = Just 0 }
-       let printableWidth = foldr ((+) . dLength) 0 printable
        mbLineLength <- gets lineLength
        let pad =
             case (align', mbLineLength, printableWidth) of
@@ -292,7 +307,8 @@ emitLine addNewline = do
                  -> let padw = linelen - w
                     in  (Text NoFill padw (T.replicate padw " ") :)
               _                           -> id
-       return (Line addNewline (pad printable) :)
+       hasContinuation <- (not . null) <$> gets currentLine
+       return (Line (addNewline || hasContinuation) (pad printable) :)
 
 emitBlanks :: Int -> State RenderState ([Line] -> [Line])
 emitBlanks n = do
