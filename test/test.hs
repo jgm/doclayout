@@ -74,8 +74,9 @@ tests =
       @?= ("    aa\n\n    bb\n    cc" :: Text)
 
   , testCase "hang" $
-      render Nothing (hang 4 "  - " "aa\n\nbb\ncc")
-      @?= ("  - aa\n\n    bb\n    cc" :: Text)
+      render Nothing (hang 4 "  - " (chomp "aa\n\nbb\ncc" <> cr) $$
+                      hang 4 "  - " (chomp "dd\n" <> cr))
+      @?= ("  - aa\n\n    bb\n    cc\n  - dd\n" :: Text)
 
   , testCase "aligned" $
       render Nothing ("aa" <> aligned ("bb" $$ "cc") <> "dd")
