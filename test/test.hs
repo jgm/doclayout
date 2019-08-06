@@ -73,6 +73,10 @@ tests =
       render Nothing (nest 4 "aa\n\nbb\ncc")
       @?= ("    aa\n\n    bb\n    cc" :: Text)
 
+  , testCase "hang" $
+      render Nothing (hang 4 "  - " "aa\n\nbb\ncc")
+      @?= ("  - aa\n\n    bb\n    cc" :: Text)
+
   , testCase "aligned" $
       render Nothing ("aa" <> aligned ("bb" $$ "cc") <> "dd")
       @?= ("aabb\n  ccdd" :: Text)
