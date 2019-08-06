@@ -67,7 +67,6 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.List.NonEmpty as N
-import Control.Monad (unless)
 import Data.String
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
@@ -192,7 +191,6 @@ groupLines [] = do
 groupLines (d:ds) = do
   linelen <- gets lineLength
   col <- gets column
-  curline <- gets currentLine
   case d of
     WithColumn f -> groupLines $ toList (unDoc (f col)) <> ds
     WithLineLength f -> groupLines $ toList (unDoc (f linelen)) <> ds
@@ -213,9 +211,8 @@ groupLines (d:ds) = do
       groupLines ds
     SoftSpace
       | maybe False (col >) linelen -> do
-          addToCurrentLine d
           f <- emitLine True
-          f <$> groupLines ds
+          f <$> groupLines (d:ds)
       | otherwise -> do
         addToCurrentLine d
         groupLines ds
@@ -225,10 +222,10 @@ groupLines (d:ds) = do
               then return id
               else emitBlanks n
       f . g <$> groupLines ds
-    Text _ len _ -> do
+    Text{} -> do
       addToCurrentLine d
       groupLines ds
-    Box len _doc -> do
+    Box{} -> do
       addToCurrentLine d
       groupLines ds
     Newline -> do
