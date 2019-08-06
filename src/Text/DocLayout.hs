@@ -199,16 +199,18 @@ groupLines (d:ds) = do
         st{ nesting = f col (N.head (nesting st)) N.<| nesting st }
       groupLines ds
     PopNesting -> do
+      f <- emitLine True
       modify $ \st -> st{ nesting = fromMaybe (nesting st)
                               (snd $ N.uncons (nesting st)) }
-      groupLines ds
+      f <$> groupLines ds
     PushAlignment align' -> do
       modify $ \st -> st{ alignment = align' N.<| alignment st }
       groupLines ds
     PopAlignment -> do
+      f <- emitLine True
       modify $ \st -> st{ alignment = fromMaybe (alignment st)
                             (snd $ N.uncons (alignment st)) }
-      groupLines ds
+      f <$> groupLines ds
     SoftSpace
       | maybe False (col >) linelen -> do
           f <- emitLine True
@@ -472,18 +474,15 @@ resizableBox mbMinWidth mbMaxWidth doc = box width doc
 -- text derived from @d@ and aligned to the left.  Also chomps
 -- the included document for backwards compatibility.
 lblock :: Int -> Doc -> Doc
-lblock w doc = box w (alignLeft (chomp doc) <> cr)
+lblock w doc = box w (alignLeft (chomp doc))
 
 -- | Like 'lblock' but aligned to the right.
 rblock :: Int -> Doc -> Doc
-rblock w doc = box w (alignRight (chomp doc) <> cr)
+rblock w doc = box w (alignRight (chomp doc))
 
 -- | Like 'lblock' but aligned centered.
 cblock :: Int -> Doc -> Doc
-cblock w doc = box w (alignCenter (chomp doc) <> cr)
-
--- Note: we need cr in these definitions, or the last line
--- gets the wrong alignment:
+cblock w doc = box w (alignCenter (chomp doc))
 
 -- | Align left.
 alignLeft :: Doc -> Doc
