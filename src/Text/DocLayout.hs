@@ -206,8 +206,12 @@ groupLines (d:ds) = do
           , currentNesting = newnesting }
       groupLines ds
     PopNesting -> do
-      modify $ \st -> st{ nesting = fromMaybe (nesting st)
-                                (snd $ N.uncons (nesting st)) }
+      modify $ \st ->
+        st{ nesting = fromMaybe (nesting st) $ snd $ N.uncons (nesting st) }
+      modify $ \st -> st{ currentNesting =
+        if null (currentLine st)
+           then N.head (nesting st)
+           else currentNesting st }
       groupLines ds
     PushAlignment align' -> do
       modify $ \st -> st{ alignment = align' N.<| alignment st
