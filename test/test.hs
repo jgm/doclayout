@@ -140,4 +140,12 @@ tests =
      let foo = "A baosnetuh snaothsn aoesnth aoesnth aosenth sentuhaoeu"
      in getDimensions Nothing (hsep (map text $ words $ foo) <> cr <> "bar")
      @?= (length foo, 2)
+
+  , testCase "nested wrapped text" $
+     render (Just 10) (" - " <> nest 3 (hsep ["hi","there"]))
+     @?= (" - hi\n   there" :: Text)
+
+  , testCase "aligned wrapped text" $
+     render Nothing (cblock 7 ("hi" <+> "there"))
+     @?= ("  hi\n there" :: Text)
   ]
