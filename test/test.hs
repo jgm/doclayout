@@ -15,8 +15,8 @@ tests =
       render (Just 10) (vcat $ map chomp ["aaa", "bbb", "ccc"])
       @?= ("aaa\nbbb\nccc" :: String)
 
-  , testCase "variant" $
-      render (Just 10) ((chomp "aaa") $$ (chomp "bbb") $$ (chomp "ccc"))
+  , testCase "vcat with chomp" $
+      render (Just 10) (chomp "aaa" $$ chomp "bbb" $$ chomp "ccc")
       @?= ("aaa\nbbb\nccc" :: String)
 
   , testCase "simple text above line length" $
@@ -44,8 +44,13 @@ tests =
       @?= False
 
   , testCase "prefixed with multi paragraphs" $
-      render (Just 80) (prefixed "> " ("foo" <> cr <> "bar" <> blankline <> "baz"))
-      @?= ("> foo\n> bar\n>\n> baz" :: String)
+      render (Just 80) (prefixed "> " ("foo" <+> "bar" <> cr <>
+               "baz" <> blankline <> "bim" <+> "bam"))
+      @?= ("> foo bar\n> baz\n>\n> bim bam" :: String)
+
+  , testCase "prefixed with hsep" $
+      render Nothing (prefixed "> " $ hsep ["a","b","c"])
+      @?= ("> a b c" :: Text)
 
   , testCase "breaking space before empty box" $
       render Nothing ("a" <> space <> box 3 mempty)
@@ -53,7 +58,7 @@ tests =
 
   , testCase "centered" $
       render (Just 10) (alignCenter "hi\nlow")
-      @?= ("    hi\n   low" :: String)
+      @?= ("    hi\n   low\n" :: String)
 
   , testCase "vfill" $
       render Nothing (vfill "|" <> box 2 (vcat $ replicate 4 "aa") <>
@@ -74,7 +79,7 @@ tests =
 
   , testCase "centered box" $
       render Nothing ("aa" <> box 4 (alignCenter $ "bb" $$ "cc") <> "dd")
-      @?= ("aa bb dd\n   cc" :: Text)
+      @?= ("aa bb dd\n   cc\n" :: Text)
 
   , testCase "blanks at beginning" $
       render Nothing (blanklines 2 <> "aa")
@@ -82,7 +87,7 @@ tests =
 
   , testCase "blanks at end" $
       render Nothing ("aa" <> blanklines 2)
-      @?= ("aa" :: Text)
+      @?= ("aa\n" :: Text)
 
   , testCase "chomp 1" $
       render Nothing (chomp (("aa" <> space) <> blankline) <> "bb")
@@ -108,7 +113,7 @@ tests =
 
   , testCase "chomp with box at end" $
       render Nothing ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
-      @?= ("aa\naa" :: Text)
+      @?= ("aa\naa\n" :: Text)
 
   , testCase "empty and $$" $
       render Nothing ("aa" $$ empty $$ "bb")
@@ -121,6 +126,14 @@ tests =
                           lblock 3 " | " <> lblock 4 "----") $$
                       (rblock 4 "dd" <> lblock 3 " | " <> cblock 4 "ee" <>
                           lblock 3 " | " <> lblock 4 "ff"))
-      @?= ("  aa |  bb  | cc\n---- | ---- | ----\n  dd |  ee  | ff" :: Text)
+      @?= ("  aa |  bb  | cc\n---- | ---- | ----\n  dd |  ee  | ff\n" :: Text)
 
+  , testCase "proper wrapping with multiple components" $
+      render (Just 10) ("aa" <> space <> "bbbbb" <> "ccccc")
+      @?= ("aa\nbbbbbccccc" :: Text)
+
+  , testCase "getDimensions" $
+     let foo = "A baosnetuh snaothsn aoesnth aoesnth aosenth sentuhaoeu"
+     in getDimensions Nothing (hsep (map text $ words $ foo) <> cr <> "bar")
+     @?= (length foo, 2)
   ]

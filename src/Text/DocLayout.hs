@@ -127,8 +127,15 @@ data Fill = VFill | NoFill
 data Alignment = AlLeft | AlRight | AlCenter
   deriving (Show)
 
-newtype Line = Line { unLine :: [D] }
+data Line = Line Bool [D]
   deriving (Show)
+
+instance Semigroup Line where
+  Line b1 x1 <> Line b2 x2 = Line (b1 || b2) (x1 <> x2)
+
+instance Monoid Line where
+  mappend = (<>)
+  mempty = Line False []
 
 instance IsString Doc where
   fromString = text
@@ -147,7 +154,6 @@ data RenderState = RenderState{
 -- | Render a Doc with an optional width.
 render :: ConvertibleStrings LazyText a => Maybe Int -> Doc -> a
 render linelen = convertString . B.toLazyText . mconcat .
-                 intersperse (B.singleton '\n') .
                  map buildLine .  snd .  buildLines linelen
 
 -- | Returns (width, height) of Doc.
@@ -177,14 +183,16 @@ startingState linelen =
 
 -- Group Ds into lines.
 groupLines :: [D] -> State RenderState [Line]
-groupLines [] = ($ []) <$> emitLine
+groupLines [] = do
+  f <- emitLine False
+  curline <- gets currentLine
+  if null curline
+     then return $ f []
+     else f <$> groupLines []
 groupLines (d:ds) = do
   linelen <- gets lineLength
   col <- gets column
   curline <- gets currentLine
-  let hasSoftSpace = case curline of
-                           SoftSpace:_ -> True
-                           _           -> False
   case d of
     WithColumn f -> groupLines $ toList (unDoc (f col)) <> ds
     WithLineLength f -> groupLines $ toList (unDoc (f linelen)) <> ds
@@ -203,33 +211,29 @@ groupLines (d:ds) = do
       modify $ \st -> st{ alignment = fromMaybe (alignment st)
                             (snd $ N.uncons (alignment st)) }
       groupLines ds
-    SoftSpace -> do
-      unless hasSoftSpace $
+    SoftSpace
+      | maybe False (col >) linelen -> do
+          addToCurrentLine d
+          f <- emitLine True
+          f <$> groupLines ds
+      | otherwise -> do
         addToCurrentLine d
-      groupLines ds
+        groupLines ds
     Blanks n -> do
-      f <- emitLine
+      f <- emitLine True
       g <- if null ds  -- don't put blank line at end of doc
               then return id
               else emitBlanks n
       f . g <$> groupLines ds
-    Text _ len _
-      | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
-          addToCurrentLine d
-          groupLines ds
-      | otherwise -> do
-          f <- emitLine
-          f <$> groupLines (d:ds)
-    Box len _doc
-      | maybe True ((col + len) <=) linelen || not hasSoftSpace -> do
-          addToCurrentLine d
-          groupLines ds
-      | otherwise -> do
-          f <- emitLine
-          f <$> groupLines (d:ds)
+    Text _ len _ -> do
+      addToCurrentLine d
+      groupLines ds
+    Box len _doc -> do
+      addToCurrentLine d
+      groupLines ds
     Newline -> do
-          f <- emitLine
-          f <$> groupLines ds
+      f <- emitLine True
+      f <$> groupLines ds
 
 addToCurrentLine :: D -> State RenderState ()
 addToCurrentLine d = do
@@ -252,25 +256,42 @@ addToCurrentLine d = do
                     -- getDimensions can pick up actual
                     -- dimensions.
 
-emitLine :: State RenderState ([Line] -> [Line])
-emitLine = do
+emitLine :: Bool -> State RenderState ([Line] -> [Line])
+emitLine addNewline = do
   align' N.:| _ <- gets alignment
   curline <- gets currentLine
-  col <- gets column
+  let revline = dropWhile isSoftSpace curline
+  let (revnext, revthis) = break isSoftSpace revline
+  mbLineLen <- gets lineLength
+  col <- case curline of
+           SoftSpace:_ -> (\x -> x - 1) <$> gets column
+           _           -> gets column
   nest' N.:| _ <- gets nesting
-  modify $ \st -> st{ currentLine = []
-                    , column = nest'
-                    , actualWidth =
-                       if col > actualWidth st
-                          then col
-                          else actualWidth st
-                    }
-  let printable = reverse (dropWhile isSoftSpace curline)
+  printable <-
+    if maybe True (col <=) mbLineLen
+       then do
+         modify $ \st -> st{ currentLine = []
+                           , column = nest' }
+         return $ reverse revline
+       else case revthis of
+         _:xs -> do
+           modify $ \st ->
+             st{ currentLine = revnext
+               , column = nest' + foldr ((+) . dLength) 0 revnext }
+           return $ reverse xs
+         [] -> do
+           modify $ \st -> st{ currentLine = []
+                             , column = nest' }
+           return $ reverse revline -- no soft space, emit overlong
+  let printableWidth = foldr ((+) . dLength) 0 printable
+  modify $ \st -> st{ actualWidth =
+                       if printableWidth > actualWidth st
+                          then printableWidth
+                          else actualWidth st }
   if null printable
      then return id
      else do
        modify $ \st -> st{ blanks = Just 0 }
-       let printableWidth = foldr ((+) . dLength) 0 printable
        mbLineLength <- gets lineLength
        let pad =
             case (align', mbLineLength, printableWidth) of
@@ -286,7 +307,8 @@ emitLine = do
                  -> let padw = linelen - w
                     in  (Text NoFill padw (T.replicate padw " ") :)
               _                           -> id
-       return (Line (pad printable) :)
+       hasContinuation <- (not . null) <$> gets currentLine
+       return (Line (addNewline || hasContinuation) (pad printable) :)
 
 emitBlanks :: Int -> State RenderState ([Line] -> [Line])
 emitBlanks n = do
@@ -301,7 +323,7 @@ emitBlanks n = do
            modify $ \st -> st { currentLine = []
                               , column = nest'
                               , blanks = Just $ bls + 1 }
-           ((Line []:) .) <$> emitBlanks n
+           ((Line True []:) .) <$> emitBlanks n
          else return id
 
 isSoftSpace :: D -> Bool
@@ -314,26 +336,31 @@ isBox _ = False
 
 handleBoxes :: [Line] -> [Line]
 handleBoxes [] = []
-handleBoxes (Line ds : ls)
+handleBoxes (Line addNewline ds : ls)
   | any isBox ds = newlines ++ handleBoxes ls
-  | otherwise    = Line ds : handleBoxes ls
+  | otherwise    = Line addNewline ds : handleBoxes ls
  where
-  newlines = map (Line . mconcat) $ transpose $
+  newlines = map mconcat $ transpose $
               zipWith padBox boxes [1..]
-  boxes :: [(Int, Int, [[D]])]
+  boxes :: [(Int, Int, [Line])]
   boxes = map expandBox ds
   numboxes = length boxes
+  expandBox :: D -> (Int, Int, [Line])
   expandBox (Box w doc) = (w, length ls', ls')
-    where ls' = map unLine . snd $ buildLines (Just w) doc
-  expandBox d = (dLength d, 1, [[d]])
+    where ls' = snd $ buildLines (Just w) doc
+  expandBox d = (dLength d, 1, [Line addNewline [d]])
   maxdepth = maximum $ map (\(_,x,_) -> x) boxes
+  padBox :: (Int, Int, [Line]) -> Int -> [Line]
   padBox (w, d, ls') num
-    | d < maxdepth = ls' ++ replicate (maxdepth - d)
-                             (case ls' of
-                               [[Text VFill _ t]] -> [Text VFill w t]
-                               _ | num == numboxes -> []
-                                 | otherwise -> replicate w SoftSpace)
+    | d < maxdepth = ls' ++ replicate (maxdepth - d - 1) fillLine
+                         ++ case fillLine of
+                              Line _ xs -> [Line addNewline xs]
     | otherwise    = ls'
+   where
+    fillLine = case ls' of
+                 [Line _ [Text VFill _ t]] -> Line True [Text VFill w t]
+                 _ | num == numboxes -> Line True []
+                   | otherwise -> Line True (replicate w SoftSpace)
 
 dLength :: D -> Int
 dLength (Text _ n _) = n
@@ -343,7 +370,9 @@ dLength _            = 0
 
 -- Render a line.
 buildLine :: Line -> Builder
-buildLine (Line ds) = fromMaybe mempty $ foldr go Nothing ds
+buildLine (Line addNewline ds) =
+ (fromMaybe mempty $ foldr go Nothing ds) <>
+ if addNewline then B.fromText "\n" else mempty
  where
    go (Text _ _ t) Nothing    = Just (B.fromText t)
    go (Text _ _ t) (Just acc) = Just (B.fromText t <> acc)
@@ -588,11 +617,12 @@ aligned doc =
 -- the argument. Final spaces are treated as soft spaces.
 prefixed :: String -> Doc -> Doc
 prefixed pref doc =
-  withLineLength $ \mblen ->
+  withColumn $ \col ->
+   withLineLength $ \mblen ->
     let boxwidth =
          case mblen of
-           Just l  -> l - realLength pref
-           Nothing -> fst (getDimensions Nothing doc) - realLength pref
+           Just l  -> l - col - realLength pref
+           Nothing -> fst (getDimensions Nothing doc)
         (pref', sps) = case span (==' ') (reverse pref) of
                              (xs, ys) -> (reverse ys,
                                           mconcat (replicate (length xs)
