@@ -74,7 +74,7 @@ tests =
       @?= ("    aa\n\n    bb\n    cc" :: Text)
 
   , testCase "hang" $
-      render Nothing (hang 4 "  - " (chomp "aa\n\nbb\ncc" <> cr) $$
+      render Nothing (hang 4 "  - " (chomp "aa\n\nbb\ncc" <> cr) <>
                       hang 4 "  - " (chomp "dd\n" <> cr))
       @?= ("  - aa\n\n    bb\n    cc\n  - dd\n" :: Text)
 
