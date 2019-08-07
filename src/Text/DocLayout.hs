@@ -245,17 +245,11 @@ groupLines (d:ds) = do
         addToCurrentLine d
         groupLines ds
     Blanks n -> do
-      f <- emitLine True
-      curline <- gets currentLine
-      -- if emitLine put some things back in currentLine,
-      -- then we need to process the Newline again
-      -- or the line will be improperly wrapped.
-      -- TODO - THIS IS UGLY - find a better way?
+      f <- flushLines
       g <- if null ds  -- don't put blank line at end of doc
               then return id
               else emitBlanks n
-      f . g <$> groupLines
-            (if null curline then ds else Newline:ds)
+      f . g <$> groupLines ds
     Text{} -> do
       addToCurrentLine d
       groupLines ds
@@ -263,13 +257,8 @@ groupLines (d:ds) = do
       addToCurrentLine d
       groupLines ds
     Newline -> do
-      f <- emitLine True
-      curline <- gets currentLine
-      -- if emitLine put some things back in currentLine,
-      -- then we need to process the Newline again
-      -- or the line will be improperly wrapped:
-      f <$> groupLines
-            (if null curline then ds else Newline:ds)
+      f <- flushLines
+      f <$> groupLines ds
 
 addToCurrentLine :: D -> State RenderState ()
 addToCurrentLine d = do
@@ -291,6 +280,17 @@ addToCurrentLine d = do
                     -- we could not fit the content.
                     -- getDimensions can pick up actual
                     -- dimensions.
+
+-- like emitLine, but repeats as long as there is new content
+flushLines :: State RenderState ([Line] -> [Line])
+flushLines = do
+  curline <- gets currentLine
+  if null curline
+     then return id
+     else do
+       f <- emitLine True
+       g <- flushLines
+       return $ f . g
 
 emitLine :: Bool -> State RenderState ([Line] -> [Line])
 emitLine addNewline = do
