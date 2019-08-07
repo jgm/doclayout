@@ -98,6 +98,10 @@ tests =
       render Nothing ("aa" <> blanklines 2)
       @?= ("aa\n" :: Text)
 
+  , testCase "blanks at end" $
+      render Nothing ("aa" <> cr <> blanklines 2 <> blanklines 0)
+      @?= ("aa\n" :: Text)
+
   , testCase "chomp 1" $
       render Nothing (chomp (("aa" <> space) <> blankline) <> "bb")
       @?= ("aabb" :: Text)
