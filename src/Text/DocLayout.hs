@@ -258,7 +258,12 @@ groupLines (d:ds) = do
       groupLines ds
     Newline -> do
       f <- emitLine True
-      f <$> groupLines ds
+      curline <- gets currentLine
+      -- if emitLine put some things back in currentLine,
+      -- then we need to process the Newline again
+      -- or the line will be improperly wrapped:
+      f <$> groupLines
+            (if null curline then ds else Newline:ds)
 
 addToCurrentLine :: D -> State RenderState ()
 addToCurrentLine d = do
