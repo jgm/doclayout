@@ -121,7 +121,7 @@ instance Show D where
   show PopAlignment = "PopAlignment"
 
 data Fill = VFill | NoFill
-  deriving (Show)
+  deriving (Show, Eq, Ord)
 
 data Alignment = AlLeft | AlRight | AlCenter
   deriving (Show)
@@ -165,7 +165,7 @@ getDimensions linelen doc = (w, length ls)  -- width x height
 
 buildLines :: Maybe Int -> Doc -> (Int, [Line])
 buildLines linelen doc =
-  evalState (do ls <- groupLines (toList (unDoc doc))
+  evalState (do ls <- groupLines (consolidateStream $ toList (unDoc doc))
                 w <- gets actualWidth
                 return (w, handleBoxes ls))
     (startingState linelen)
@@ -183,6 +183,14 @@ startingState linelen =
              , actualWidth = 0
              }
 
+
+consolidateStream :: [D] -> [D]
+consolidateStream [] = []
+consolidateStream (Blanks n : Blanks m : xs) =
+  consolidateStream (Blanks (n+m) :xs)
+consolidateStream (Text x1 l1 t1 : Text x2 l2 t2 : xs)
+  | x1 == x2 = consolidateStream (Text x1 (l1 + l2) (t1 <> t2) : xs)
+consolidateStream (x:xs) = x : consolidateStream xs
 
 -- Group Ds into lines.
 groupLines :: [D] -> State RenderState [Line]
