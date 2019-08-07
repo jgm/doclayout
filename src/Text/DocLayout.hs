@@ -340,7 +340,7 @@ emitBlanks :: Int -> State RenderState ([Line] -> [Line])
 emitBlanks n = do
   nest' N.:| _ <- gets nesting
   mbbls <- gets blanks
-  case traceShowId mbbls of
+  case mbbls of
     Nothing -> return id -- at beginning of document, don't add blanks
     Just bls -> do
       let blsNeeded = n - bls
