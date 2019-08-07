@@ -186,6 +186,10 @@ startingState linelen =
 
 consolidateStream :: [D] -> [D]
 consolidateStream [] = []
+consolidateStream (Newline : Blanks n : xs) =
+  consolidateStream (Blanks n : xs)
+consolidateStream (Blanks n : Newline : xs) =
+  consolidateStream (Blanks n : xs)
 consolidateStream (Blanks n : Blanks m : xs) =
   consolidateStream (Blanks (n+m) :xs)
 consolidateStream (Text x1 l1 t1 : Text x2 l2 t2 : xs)
@@ -336,7 +340,7 @@ emitBlanks :: Int -> State RenderState ([Line] -> [Line])
 emitBlanks n = do
   nest' N.:| _ <- gets nesting
   mbbls <- gets blanks
-  case mbbls of
+  case traceShowId mbbls of
     Nothing -> return id -- at beginning of document, don't add blanks
     Just bls -> do
       let blsNeeded = n - bls
