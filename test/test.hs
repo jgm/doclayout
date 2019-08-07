@@ -110,6 +110,10 @@ tests =
       render Nothing (alignLeft ("aa" <> blankline) <> cr <> blankline)
       @?= ("aa\n" :: Text)
 
+  , testCase "blanks around cr" $
+      render Nothing ("aa" <> blankline <> cr <> blankline <> "bb")
+      @?= ("aa\n\nbb" :: Text)
+
   , testCase "chomp 1" $
       render Nothing (chomp (("aa" <> space) <> blankline) <> "bb")
       @?= ("aabb" :: Text)

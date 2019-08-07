@@ -195,7 +195,7 @@ consolidateStream (Blanks n : PopAlignment : xs) =
 consolidateStream (Blanks n : Newline : xs) =
   consolidateStream (Blanks n : xs)
 consolidateStream (Blanks n : Blanks m : xs) =
-  consolidateStream (Blanks (n+m) :xs)
+  consolidateStream (Blanks (max n m) :xs)
 consolidateStream (Text x1 l1 t1 : Text x2 l2 t2 : xs)
   | x1 == x2 = consolidateStream (Text x1 (l1 + l2) (t1 <> t2) : xs)
 consolidateStream (x:xs) = x : consolidateStream xs
