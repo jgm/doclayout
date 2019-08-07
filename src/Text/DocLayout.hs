@@ -246,10 +246,16 @@ groupLines (d:ds) = do
         groupLines ds
     Blanks n -> do
       f <- emitLine True
+      curline <- gets currentLine
+      -- if emitLine put some things back in currentLine,
+      -- then we need to process the Newline again
+      -- or the line will be improperly wrapped.
+      -- TODO - THIS IS UGLY - find a better way?
       g <- if null ds  -- don't put blank line at end of doc
               then return id
               else emitBlanks n
-      f . g <$> groupLines ds
+      f . g <$> groupLines
+            (if null curline then ds else Newline:ds)
     Text{} -> do
       addToCurrentLine d
       groupLines ds
