@@ -118,6 +118,10 @@ tests =
       render (Just 8) (vcat [hang 2 "- " (chomp $ text "aaaaa" <> space <> "bbb"), hang 2 "- " (text "aoeu")])
       @?= ("- aaaaa\n  bbb\n- aoeu" :: Text)
 
+   , testCase "strange wrap case" $
+      render (Just 8) (text "aaaaa" <> space <> text "bbbbb" <> blankline <> text "ccccc")
+      @?= ("aaaaa\nbbbbb\n\nccccc" :: Text)
+
   , testCase "chomp 1" $
       render Nothing (chomp (("aa" <> space) <> blankline) <> "bb")
       @?= ("aabb" :: Text)
