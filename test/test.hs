@@ -98,8 +98,16 @@ tests =
       render Nothing ("aa" <> blanklines 2)
       @?= ("aa\n" :: Text)
 
-  , testCase "blanks at end" $
+  , testCase "blanks at end with multiple" $
       render Nothing ("aa" <> cr <> blanklines 2 <> blanklines 0)
+      @?= ("aa\n" :: Text)
+
+  , testCase "blanks at end with nesting" $
+      render Nothing (nest 2 (nest 3 ("aa" <> blankline) <> cr <> blanklines 2) <> blanklines 2)
+      @?= ("     aa\n" :: Text)
+
+  , testCase "blanks at end with alignment" $
+      render Nothing (alignLeft ("aa" <> blankline) <> cr <> blankline)
       @?= ("aa\n" :: Text)
 
   , testCase "chomp 1" $

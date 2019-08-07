@@ -188,6 +188,10 @@ consolidateStream :: [D] -> [D]
 consolidateStream [] = []
 consolidateStream (Newline : Blanks n : xs) =
   consolidateStream (Blanks n : xs)
+consolidateStream (Blanks n : PopNesting : xs) =
+  consolidateStream (PopNesting : Blanks n : xs)
+consolidateStream (Blanks n : PopAlignment : xs) =
+  consolidateStream (PopNesting : Blanks n : xs)
 consolidateStream (Blanks n : Newline : xs) =
   consolidateStream (Blanks n : xs)
 consolidateStream (Blanks n : Blanks m : xs) =
