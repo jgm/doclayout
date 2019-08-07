@@ -70,7 +70,7 @@ import qualified Data.List.NonEmpty as N
 import Data.String
 import Data.Sequence (Seq)
 import qualified Data.Sequence as Seq
-import Data.List (foldl', transpose, intersperse)
+import Data.List (foldl', transpose)
 import Control.Monad.State.Strict
 import qualified Data.Text.Lazy.Builder as B
 import Data.Text.Lazy.Builder (Builder)
@@ -434,10 +434,12 @@ blanklines n = single (Blanks n)
 
 -- | A literal string, possibly including newlines.
 text :: String -> Doc
-text s = case lines s of
-           []  -> mempty
-           [x] -> lit x
-           xs  -> mconcat $ intersperse cr (map lit xs)
+text s =
+  case break (=='\n') s of
+    ([], [])     -> mempty
+    ([], (_:xs)) -> lit "" <> cr <> text xs
+    (xs, [])     -> lit xs
+    (xs, (_:ys)) -> lit xs <> cr <> text ys
 
 -- | A raw string, assumed not to include newlines.
 lit :: String -> Doc
