@@ -23,9 +23,9 @@ library
   exposed-modules:     Text.DocLayout
   build-depends:       base >= 4.9 && < 5,
                        text,
+                       safe,
                        containers,
                        mtl,
-                       unordered-containers,
                        string-conversions
   if !impl(ghc >= 8.0)
     build-depends:     semigroups == 0.18.*

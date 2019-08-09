@@ -8,24 +8,27 @@ including wrapped text, indentated blocks, and tables.
 -}
 
 module Text.DocLayout (
-       Doc
---     , render
---     , getDimensions
---     , cr
---     , blankline
---     , blanklines
---     , space
---     , text
---     , lit
+       Doc(..)
+     , Dimensions(..)
+     , Alignment(..)
+     , NestingChange(..)
+     , render
+     , getDimensions
+     , cr
+     , blankline
+     , blanklines
+     , space
+     , text
+     , lit
 --     , vfill
 --     , char
 --     , box
 --     , resizableBox
 --     , prefixed
---     , flush
---     , nest
+     , flush
+     , nest
+     , hang
 --     , aligned
---     , hang
 --     , alignLeft
 --     , alignRight
 --     , alignCenter
@@ -58,24 +61,22 @@ module Text.DocLayout (
 --     , parens
 --     , quotes
 --     , doubleQuotes
---     , charWidth
---     , realLength
+     , charWidth
+     , realLength
      )
 
 where
+
 -- import Data.Maybe (fromMaybe)
--- import Data.Text (Text)
--- import qualified Data.Text as T
+import Data.Text (Text)
+import qualified Data.Text as T
 -- import qualified Data.List.NonEmpty as N
--- import Data.String
--- import Data.Sequence (Seq)
--- import qualified Data.Sequence as Seq
-import Data.List (foldl', transpose)
--- import Control.Monad.State.Strict
--- import qualified Data.Text.Lazy.Builder as B
--- import Data.Text.Lazy.Builder (Builder)
--- import Data.Foldable (toList)
--- import Data.String.Conversions (ConvertibleStrings(..), LazyText)
+import Data.String
+import Data.List (foldl', transpose, intersperse)
+import Control.Monad.RWS.Strict
+import qualified Data.Text.Lazy.Builder as B
+import Data.Text.Lazy.Builder (Builder)
+import Data.String.Conversions (ConvertibleStrings(..), LazyText)
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup (Semigroup)
@@ -83,7 +84,146 @@ import Data.Semigroup (Semigroup)
 
 import Debug.Trace
 
+data Alignment = AlLeft | AlRight | AlCenter
+  deriving (Show, Eq, Ord)
+
+data NestingChange =
+    IncreaseNesting !Int
+  | SetNesting !Int
+  deriving (Show, Eq, Ord)
+
 data Doc
+  = Empty
+  | SoftBreak
+  | LineBreak
+  | HFill !Int
+  | VFill !Int
+  | Lit !Int !Text
+  | PushNesting NestingChange
+  | PopNesting
+  | Box !(Maybe Int) !Alignment Doc
+  | Chomp Doc
+  | Concat Doc Doc
+  deriving (Show, Eq, Ord)
+
+instance Semigroup Doc where
+  (<>) = Concat
+
+instance Monoid Doc where
+  mappend = (<>)
+  mempty  = Empty
+
+instance IsString Doc where
+  fromString = text
+
+-- | Render a Doc with an optional width.
+render :: ConvertibleStrings LazyText a => Maybe Int -> Doc -> a
+render linelen = convertString . B.toLazyText . mconcat .
+  map lineContents . snd . toLines linelen
+
+data Line =
+  Line
+  { lineWidth    :: !Int
+  , lineContents :: Builder
+  } deriving (Show, Eq, Ord)
+
+data Dimensions =
+  Dimensions
+  { docWidth     :: !Int
+  , docHeight    :: !Int
+  } deriving (Show, Eq, Ord)
+
+instance Semigroup Dimensions where
+  Dimensions w1 h1 <> Dimensions w2 h2 =
+    Dimensions (max w1 w2) (h1 + h2)
+
+instance Monoid Dimensions where
+  mappend = (<>)
+  mempty = Dimensions 0 0
+
+-- | Returns (width, height) of Doc.
+getDimensions :: Maybe Int -> Doc -> Dimensions
+getDimensions linelen = fst . toLines linelen
+
+--
+-- Constructors for Doc
+--
+
+-- | A literal string, possibly including newlines.
+text :: String -> Doc
+text s =
+  case break (=='\n') s of
+    ([], [])     -> mempty
+    ([], (_:xs)) -> lit "" <> cr <> text xs
+    (xs, [])     -> lit xs
+    (xs, (_:ys)) -> lit xs <> cr <> text ys
+
+-- | A raw string, assumed not to include newlines.
+lit :: String -> Doc
+lit s  = Lit (realLength s) (T.pack s)
+
+-- | A carriage return.  Does nothing if we're at the beginning of
+-- a line; otherwise inserts a newline.
+cr :: Doc
+cr = LineBreak
+
+-- | A breaking (reflowable) space.
+space :: Doc
+space = HFill 1
+
+-- | Inserts a blank line unless one exists already.
+-- (@blankline <> blankline@ has the same effect as @blankline@.
+blankline :: Doc
+blankline = VFill 1
+
+-- | Inserts blank lines unless they exist already.
+-- (@blanklines m <> blanklines n@ has the same effect as @blanklines (max m n)@.
+blanklines :: Int -> Doc
+blanklines n = VFill n
+
+-- | Makes a 'Doc' flush against the left margin.
+flush :: Doc -> Doc
+flush doc = PushNesting (SetNesting 0) <> doc <> PopNesting
+
+-- | Indents a 'Doc' by the specified number of spaces.
+nest :: Int -> Doc -> Doc
+nest ind doc = PushNesting (IncreaseNesting ind) <> doc <> PopNesting
+
+-- | A hanging indent. @hang ind start doc@ prints @start@,
+-- then @doc@, leaving an indent of @ind@ spaces on every
+-- line but the first.
+hang :: Int -> Doc -> Doc -> Doc
+hang ind start doc = start <> nest ind doc
+
+
+--
+-- Code for dividing Doc into Lines (internal)
+--
+
+-- Divides Doc into Lines, and also returns doc dimensions (width, height).
+toLines :: Maybe Int -> Doc -> (Dimensions, [Line])
+toLines linelen doc = (dimensions, ls)
+ where
+   (ls, dimensions) = evalRWS (extractLines doc) linelen startingState
+   startingState = undefined
+
+data RenderState = RenderState
+
+type Renderer = RWS (Maybe Int) Dimensions RenderState
+
+extractLines :: Doc -> Renderer [Line]
+extractLines = foldM reflowChunk [] . splitIntoChunks
+
+splitIntoChunks :: Doc -> [Doc]
+splitIntoChunks = undefined
+
+reflowChunk :: [Line] -> Doc -> Renderer [Line]
+reflowChunk = undefined
+
+-- use this inside reflowChunk
+handleBoxes :: Line -> Renderer [Line]
+handleBoxes = undefined
+
 
 
 {-
@@ -159,6 +299,7 @@ data RenderState = RenderState{
 -- | Render a Doc with an optional width.
 render :: ConvertibleStrings LazyText a => Maybe Int -> Doc -> a
 render linelen = convertString . B.toLazyText . mconcat .
+                 intersperse (B.fromText "\n") .
                  map buildLine .  snd .  buildLines linelen
 
 -- | Returns (width, height) of Doc.
