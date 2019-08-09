@@ -91,7 +91,7 @@ data D =
                          -- if Fill is VFill, this will fill vertically
                          -- when adjacent to a multiline block.
   | Newline              -- ^ newline
-  | SoftSpace            -- ^ space or newline depending on context
+  | SoftSpace !Int       -- ^ space or newline or nothing depending on context
   | PushNesting (Int -> Int -> Int)
                          -- ^ change nesting level: first argument to
                          -- function is current column (before left
@@ -110,7 +110,7 @@ data D =
 instance Show D where
   show (Text f n s) = "Text " ++ show f ++ " " ++ show n ++ " " ++ show s
   show Newline = "Newline"
-  show SoftSpace = "SoftSpace"
+  show (SoftSpace n) = "SoftSpace " ++ show n
   show (PushNesting _) = "PushNesting <function>"
   show PopNesting = "PopNesting"
   show (Blanks n) = "Blanks " ++ show n
@@ -237,8 +237,8 @@ groupLines (d:ds) = do
       modify $ \st -> st{ alignment = fromMaybe (alignment st)
                             (snd $ N.uncons (alignment st)) }
       groupLines ds
-    SoftSpace
-      | maybe False (col >) linelen -> do
+    SoftSpace n
+      | maybe False ((col + n) >) linelen -> do
           f <- emitLine True
           f <$> groupLines (d:ds)
       | otherwise -> do
@@ -267,7 +267,7 @@ addToCurrentLine d = do
   let curline' =
         case d of
           Text _ 0 _ -> curline
-          SoftSpace -> curline
+          SoftSpace _ -> curline
           _ | null curline
             , nest' > 0 ->
                  [Text NoFill nest' (T.replicate nest' " ")]
@@ -300,8 +300,8 @@ emitLine addNewline = do
   let (revnext, revthis) = break isSoftSpace revline
   mbLineLen <- gets lineLength
   col <- case curline of
-           SoftSpace:_ -> (\x -> x - 1) <$> gets column
-           _           -> gets column
+           SoftSpace n :_ -> (\x -> x - n) <$> gets column
+           _              -> gets column
   nest' <- gets currentNesting
   printable <-
     if maybe True (col <=) mbLineLen
@@ -338,12 +338,11 @@ emitLine addNewline = do
             case (align', mbLineLength, printableWidth) of
               (AlLeft, Just linelen, w) | w > 0
                  -> let padw = linelen - w
-                    in  (++ (replicate padw SoftSpace))
+                    in  (++ [SoftSpace padw])
               (AlCenter, Just linelen, w) | w > 0
                  -> let padw = (linelen - w) `div` 2
                     in  (Text NoFill padw (T.replicate padw " ") :) .
-                        (++ (replicate (linelen - (padw + printableWidth))
-                               SoftSpace))
+                        (++ [SoftSpace (linelen - (padw + printableWidth))])
               (AlRight, Just linelen, w) | w > 0
                  -> let padw = linelen - w
                     in  (Text NoFill padw (T.replicate padw " ") :)
@@ -368,7 +367,7 @@ emitBlanks n = do
          else return id
 
 isSoftSpace :: D -> Bool
-isSoftSpace SoftSpace = True
+isSoftSpace SoftSpace{} = True
 isSoftSpace _ = False
 
 isBox :: D -> Bool
@@ -401,13 +400,13 @@ handleBoxes (Line addNewline ds : ls)
     fillLine = case ls' of
                  [Line _ [Text VFill _ t]] -> Line True [Text VFill w t]
                  _ | num == numboxes -> Line True []
-                   | otherwise -> Line True (replicate w SoftSpace)
+                   | otherwise -> Line True [SoftSpace w]
 
 dLength :: D -> Int
-dLength (Text _ n _) = n
-dLength SoftSpace    = 1
-dLength (Box n _)    = n
-dLength _            = 0
+dLength (Text _ n _)  = n
+dLength (SoftSpace n) = n
+dLength (Box n _)     = n
+dLength _             = 0
 
 -- Render a line.
 buildLine :: Line -> Builder
@@ -415,18 +414,18 @@ buildLine (Line addNewline ds) =
  (fromMaybe mempty $ foldr go Nothing ds) <>
  if addNewline then B.fromText "\n" else mempty
  where
-   go (Text _ _ t) Nothing    = Just (B.fromText t)
-   go (Text _ _ t) (Just acc) = Just (B.fromText t <> acc)
-   go SoftSpace    Nothing    = Nothing -- don't render SoftSpace at end
-   go SoftSpace    (Just acc) = Just (B.fromText " " <> acc)
-   go _ x                     = x
+   go (Text _ _ t) Nothing     = Just (B.fromText t)
+   go (Text _ _ t) (Just acc)  = Just (B.fromText t <> acc)
+   go (SoftSpace _) Nothing    = Nothing -- don't render SoftSpace at end
+   go (SoftSpace n) (Just acc) = Just (B.fromText (T.replicate n " ") <> acc)
+   go _ x                      = x
 
 single :: D -> Doc
 single = Doc . Seq.singleton
 
 -- | A breaking (reflowable) space.
 space :: Doc
-space = single SoftSpace
+space = single (SoftSpace 1)
 
 -- | A carriage return.  Does nothing if we're at the beginning of
 -- a line; otherwise inserts a newline.
@@ -549,7 +548,7 @@ chomp (Doc ds) = Doc $ go ds
   where
     go ds' =
       case Seq.viewr ds' of
-        rest Seq.:> SoftSpace       -> go rest
+        rest Seq.:> SoftSpace{}     -> go rest
         rest Seq.:> Blanks{}        -> go rest
         rest Seq.:> Newline         -> go rest
         rest Seq.:> PopNesting      -> go rest Seq.|> PopNesting
@@ -628,8 +627,8 @@ vsep = foldr ($+$) empty
 -- | Makes a 'Doc' non-reflowable.
 nowrap :: Doc -> Doc
 nowrap (Doc ds) = Doc $ fmap replaceSpace ds
-  where replaceSpace SoftSpace = Text NoFill 1 " "
-        replaceSpace x         = x
+  where replaceSpace (SoftSpace n) = Text NoFill n (T.replicate n " ")
+        replaceSpace x             = x
 
 -- | Makes a 'Doc' flush against the left margin.
 flush :: Doc -> Doc
