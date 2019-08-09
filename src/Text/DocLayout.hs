@@ -214,8 +214,32 @@ type Renderer = RWS (Maybe Int) Dimensions RenderState
 extractLines :: Doc -> Renderer [Line]
 extractLines = foldM reflowChunk [] . splitIntoChunks
 
+-- reversed lines...
 splitIntoChunks :: Doc -> [Doc]
-splitIntoChunks = undefined
+splitIntoChunks doc =
+  case getChunk doc Nothing [] of
+    (Nothing, ds) -> ds
+    (Just _ , _)  -> error "splitIntoChunks returned Just"
+
+getChunk :: Doc -> Maybe Doc -> [Doc] -> (Maybe Doc, [Doc])
+getChunk doc Nothing ds =
+  case doc of
+    Empty -> (Nothing, ds)
+    LineBreak -> (Nothing, ds)
+    VFill{} -> (Nothing, doc:ds)
+    Concat d1 d2 ->
+      let (mbdoc', ds') = getChunk d1 Nothing ds
+       in getChunk d2 mbdoc' ds'
+    _ -> (Nothing, doc:ds)
+getChunk doc (Just accum) ds =
+  case doc of
+    Empty -> (Nothing, accum:ds)
+    LineBreak -> (Nothing, accum:ds)
+    VFill{} -> (Nothing, doc:accum:ds)
+    Concat d1 d2 ->
+      case getChunk d1 (Just accum) ds of
+        (mbdoc', ds') -> getChunk d2 mbdoc' ds'
+    _ -> (Just (doc <> accum), ds)
 
 reflowChunk :: [Line] -> Doc -> Renderer [Line]
 reflowChunk = undefined
