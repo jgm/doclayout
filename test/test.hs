@@ -169,8 +169,8 @@ tests =
      @?= (length foo, 2)
 
   , testCase "nested wrapped text" $
-     render (Just 10) (" - " <> nest 3 (hsep ["hi","there"]))
-     @?= (" - hi\n   there" :: Text)
+     render (Just 10) (nest 5 (hsep ["hi", "there", "my", "friend"]) <> cr)
+     @?= ("     hi\n     there\n     my\n     friend\n" :: Text)
 
   , testCase "aligned wrapped text" $
      render Nothing (cblock 7 ("hi" <+> "there"))
