@@ -9,73 +9,73 @@ including wrapped text, indentated blocks, and tables.
 
 module Text.DocLayout (
        Doc
-     , render
-     , getDimensions
-     , cr
-     , blankline
-     , blanklines
-     , space
-     , text
-     , lit
-     , vfill
-     , char
-     , box
-     , resizableBox
-     , prefixed
-     , flush
-     , nest
-     , aligned
-     , hang
-     , alignLeft
-     , alignRight
-     , alignCenter
-     , nowrap
-     , withColumn
-     , withLineLength
-     , afterBreak
-     , offset
-     , minOffset
-     , height
-     , lblock
-     , cblock
-     , rblock
-     , (<>)
-     , (<+>)
-     , ($$)
-     , ($+$)
-     , isEmpty
-     , empty
-     , cat
-     , hcat
-     , hsep
-     , vcat
-     , vsep
-     , nestle
-     , chomp
-     , inside
-     , braces
-     , brackets
-     , parens
-     , quotes
-     , doubleQuotes
-     , charWidth
-     , realLength
+--     , render
+--     , getDimensions
+--     , cr
+--     , blankline
+--     , blanklines
+--     , space
+--     , text
+--     , lit
+--     , vfill
+--     , char
+--     , box
+--     , resizableBox
+--     , prefixed
+--     , flush
+--     , nest
+--     , aligned
+--     , hang
+--     , alignLeft
+--     , alignRight
+--     , alignCenter
+--     , nowrap
+--     , withColumn
+--     , withLineLength
+--     , afterBreak
+--     , offset
+--     , minOffset
+--     , height
+--     , lblock
+--     , cblock
+--     , rblock
+--     , (<>)
+--     , (<+>)
+--     , ($$)
+--     , ($+$)
+--     , isEmpty
+--     , empty
+--     , cat
+--     , hcat
+--     , hsep
+--     , vcat
+--     , vsep
+--     , nestle
+--     , chomp
+--     , inside
+--     , braces
+--     , brackets
+--     , parens
+--     , quotes
+--     , doubleQuotes
+--     , charWidth
+--     , realLength
      )
 
 where
-import Data.Maybe (fromMaybe)
-import Data.Text (Text)
-import qualified Data.Text as T
-import qualified Data.List.NonEmpty as N
-import Data.String
-import Data.Sequence (Seq)
-import qualified Data.Sequence as Seq
+-- import Data.Maybe (fromMaybe)
+-- import Data.Text (Text)
+-- import qualified Data.Text as T
+-- import qualified Data.List.NonEmpty as N
+-- import Data.String
+-- import Data.Sequence (Seq)
+-- import qualified Data.Sequence as Seq
 import Data.List (foldl', transpose)
-import Control.Monad.State.Strict
-import qualified Data.Text.Lazy.Builder as B
-import Data.Text.Lazy.Builder (Builder)
-import Data.Foldable (toList)
-import Data.String.Conversions (ConvertibleStrings(..), LazyText)
+-- import Control.Monad.State.Strict
+-- import qualified Data.Text.Lazy.Builder as B
+-- import Data.Text.Lazy.Builder (Builder)
+-- import Data.Foldable (toList)
+-- import Data.String.Conversions (ConvertibleStrings(..), LazyText)
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup (Semigroup)
@@ -83,6 +83,10 @@ import Data.Semigroup (Semigroup)
 
 import Debug.Trace
 
+data Doc
+
+
+{-
 newtype Doc = Doc{ unDoc :: Seq D }
   deriving (Semigroup, Monoid, Show)
 
@@ -693,6 +697,8 @@ quotes = inside (char '\'') (char '\'')
 -- | Wraps a 'Doc' in double quotes.
 doubleQuotes :: Doc -> Doc
 doubleQuotes = inside (char '"') (char '"')
+
+-}
 
 -- | Returns width of a character in a monospace font:  0 for a combining
 -- character, 1 for a regular character, 2 for an East Asian wide character.
