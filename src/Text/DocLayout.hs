@@ -403,7 +403,7 @@ handleBoxes = mconcat . map (mkLines False)
   where
   mkLines padRight d =
     case d of
-      HFill n -> [Line n (B.fromText $ T.replicate n " ")]
+      HFill n -> [Line 0 mempty] -- ignore final hfill
       Lit n t -> [Line n (B.fromText t)]
       Box expandable w d'
               -> let (dimensions, ls) = toLines (Just w) d'
@@ -424,6 +424,8 @@ handleBoxes = mconcat . map (mkLines False)
                                           else Line lw b)
                               else id
                  in pad $ adjust ls
+      Concat (HFill n) x -> combineLines padRight 0 0
+        [Line n (B.fromText $ T.replicate n " ")] (mkLines padRight x)
       Concat d1 d2 -> combineLines padRight 0 0
                          (mkLines True d1) (mkLines False d2)
       _ -> [Line 0 mempty]
