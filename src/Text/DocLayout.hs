@@ -48,9 +48,9 @@ module Text.DocLayout (
 --     , ($+$)
 --     , isEmpty
 --     , empty
---     , cat
---     , hcat
---     , hsep
+     , cat
+     , hcat
+     , hsep
 --     , vcat
 --     , vsep
 --     , nestle
@@ -109,12 +109,16 @@ data Doc
 instance Semigroup Doc where
   -- ensure that the leftmost element is accessible immediately
   (Concat w x) <> y = Concat w (Concat x y)
-  SoftBreak <> SoftBreak = SoftBreak
-  Lit n1 t1 <> Lit n2 t2 = Lit (n1 + n2) (t1 <> t2)
-  VFill m <> VFill n = VFill (max m n)
+  -- Lit n1 t1 <> Lit n2 t2 = Lit (n1 + n2) (t1 <> t2)
   LineBreak <> LineBreak = LineBreak
+  SoftBreak <> SoftBreak = SoftBreak
+  LineBreak <> SoftBreak = LineBreak
+  SoftBreak <> LineBreak = LineBreak
+  VFill m <> VFill n = VFill (max m n)
   LineBreak <> VFill m = VFill m
   VFill m <> LineBreak = VFill m
+  x <> Empty = x
+  Empty <> x = x
   x <> y = Concat x y
 
 instance Monoid Doc where
@@ -209,6 +213,23 @@ nest ind doc = PushNesting (IncreaseNesting ind) <> doc <> PopNesting
 -- line but the first.
 hang :: Int -> Doc -> Doc -> Doc
 hang ind start doc = start <> nest ind doc
+
+-- | Concatenate a list of 'Doc's.
+cat :: [Doc] -> Doc
+cat = mconcat
+
+-- | Same as 'cat'.
+hcat :: [Doc] -> Doc
+hcat = mconcat
+
+-- | Concatenate two 'Doc's, putting breakable space between them.
+infixr 6 <+>
+(<+>) :: Doc -> Doc -> Doc
+(<+>) x y = x <> space <> y
+
+-- | Same as 'cat', but putting breakable spaces between the 'Doc's.
+hsep :: [Doc] -> Doc
+hsep = foldr (<+>) mempty
 
 
 --
@@ -877,26 +898,6 @@ isEmpty = all (not . isPrinting) . unDoc
 -- | The empty document.
 empty :: Doc
 empty = mempty
-
--- | Concatenate a list of 'Doc's.
-cat :: [Doc] -> Doc
-cat = mconcat
-
--- | Same as 'cat'.
-hcat :: [Doc] -> Doc
-hcat = mconcat
-
--- | Concatenate two 'Doc's, putting breakable space between them.
-infixr 6 <+>
-(<+>) :: Doc -> Doc -> Doc
-(<+>) x y
-  | isEmpty x = y
-  | isEmpty y = x
-  | otherwise = x <> space <> y
-
--- | Same as 'cat', but putting breakable spaces between the 'Doc's.
-hsep :: [Doc] -> Doc
-hsep = foldr (<+>) empty
 
 infixr 5 $$
 -- | @a $$ b@ puts @a@ above @b@.
