@@ -32,7 +32,7 @@ module Text.DocLayout (
      , alignLeft
      , alignRight
      , alignCenter
---     , nowrap
+     , nowrap
 --     , withColumn
 --     , withLineLength
 --     , afterBreak
@@ -42,17 +42,17 @@ module Text.DocLayout (
 --     , lblock
 --     , cblock
 --     , rblock
---     , (<>)
---     , (<+>)
---     , ($$)
---     , ($+$)
+     , (<>)
+     , (<+>)
+     , ($$)
+     , ($+$)
 --     , isEmpty
---     , empty
+     , empty
      , cat
      , hcat
      , hsep
---     , vcat
---     , vsep
+     , vcat
+     , vsep
 --     , nestle
      , chomp
 --     , inside
@@ -266,6 +266,35 @@ alignCenter :: Doc -> Doc
 alignCenter doc =
   PushAlignment AlCenter <> cr <> doc <> cr <> PopAlignment
 
+-- | The empty document.
+empty :: Doc
+empty = mempty
+
+infixr 5 $$
+-- | @a $$ b@ puts @a@ above @b@.
+($$) :: Doc -> Doc -> Doc
+($$) x y = x <> cr <> y
+
+infixr 5 $+$
+-- | @a $+$ b@ puts @a@ above @b@, with a blank line between.
+($+$) :: Doc -> Doc -> Doc
+($+$) x y = x <> blankline <> y
+
+-- | List version of '$$'.
+vcat :: [Doc] -> Doc
+vcat = foldr ($$) empty
+
+-- | List version of '$+$'.
+vsep :: [Doc] -> Doc
+vsep = foldr ($+$) empty
+
+-- | Makes a 'Doc' non-reflowable.
+nowrap :: Doc -> Doc
+nowrap d =
+  case d of
+    SoftBreak -> Empty
+    Concat d1 d2 -> nowrap d1 <> nowrap d2
+    _ -> d
 
 --
 -- Code for dividing Doc into Lines (internal)
