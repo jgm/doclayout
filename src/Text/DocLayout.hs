@@ -21,7 +21,7 @@ module Text.DocLayout (
      , text
      , lit
 --     , vfill
---     , char
+     , char
 --     , box
 --     , resizableBox
 --     , prefixed
@@ -53,14 +53,14 @@ module Text.DocLayout (
      , hsep
      , vcat
      , vsep
---     , nestle
+     , nestle
      , chomp
---     , inside
---     , braces
---     , brackets
---     , parens
---     , quotes
---     , doubleQuotes
+     , inside
+     , braces
+     , brackets
+     , parens
+     , quotes
+     , doubleQuotes
      , charWidth
      , realLength
      )
@@ -251,6 +251,17 @@ chomp d =
         x -> d1 <> x
     _ -> d
 
+-- | Remove leading blank lines.
+nestle :: Doc -> Doc
+nestle d =
+  case d of
+    VFill{} -> Empty
+    Concat d1 d2 ->
+      case nestle d1 of
+        Empty -> nestle d2
+        x -> x <> d2
+    _ -> d
+
 -- | Align left.
 alignLeft :: Doc -> Doc
 alignLeft doc =
@@ -295,6 +306,36 @@ nowrap d =
     SoftBreak -> Empty
     Concat d1 d2 -> nowrap d1 <> nowrap d2
     _ -> d
+
+-- | Encloses a 'Doc' inside a start and end 'Doc'.
+inside :: Doc -> Doc -> Doc -> Doc
+inside start end contents =
+  start <> contents <> end
+
+-- | A character.
+char :: Char -> Doc
+char c = Lit (charWidth c) (T.singleton c)
+
+-- | Puts a 'Doc' in curly braces.
+braces :: Doc -> Doc
+braces = inside (char '{') (char '}')
+
+-- | Puts a 'Doc' in square brackets.
+brackets :: Doc -> Doc
+brackets = inside (char '[') (char ']')
+
+-- | Puts a 'Doc' in parentheses.
+parens :: Doc -> Doc
+parens = inside (char '(') (char ')')
+
+-- | Wraps a 'Doc' in single quotes.
+quotes :: Doc -> Doc
+quotes = inside (char '\'') (char '\'')
+
+-- | Wraps a 'Doc' in double quotes.
+doubleQuotes :: Doc -> Doc
+doubleQuotes = inside (char '"') (char '"')
+
 
 --
 -- Code for dividing Doc into Lines (internal)
