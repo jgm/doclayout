@@ -67,7 +67,7 @@ module Text.DocLayout (
 
 where
 
--- import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
 -- import qualified Data.List.NonEmpty as N
@@ -107,7 +107,15 @@ data Doc
   deriving (Show, Eq, Ord)
 
 instance Semigroup Doc where
-  (<>) = Concat
+  -- ensure that the leftmost element is accessible immediately
+  (Concat w x) <> y = Concat w (Concat x y)
+  SoftBreak <> SoftBreak = SoftBreak
+  Lit n1 t1 <> Lit n2 t2 = Lit (n1 + n2) (t1 <> t2)
+  VFill m <> VFill n = VFill (max m n)
+  LineBreak <> LineBreak = LineBreak
+  LineBreak <> VFill m = VFill m
+  VFill m <> LineBreak = VFill m
+  x <> y = Concat x y
 
 instance Monoid Doc where
   mappend = (<>)
@@ -119,13 +127,20 @@ instance IsString Doc where
 -- | Render a Doc with an optional width.
 render :: ConvertibleStrings LazyText a => Maybe Int -> Doc -> a
 render linelen = convertString . B.toLazyText . mconcat .
-  map lineContents . snd . toLines linelen
+  intersperse (B.fromText "\n") .  map lineContents . snd . toLines linelen
 
 data Line =
   Line
   { lineWidth    :: !Int
   , lineContents :: Builder
   } deriving (Show, Eq, Ord)
+
+instance Semigroup Line where
+  Line w1 c1 <> Line w2 c2 = Line (w1 + w2) (c1 <> c2)
+
+instance Monoid Line where
+  mappend = (<>)
+  mempty = Line 0 mempty
 
 data Dimensions =
   Dimensions
@@ -169,7 +184,7 @@ cr = LineBreak
 
 -- | A breaking (reflowable) space.
 space :: Doc
-space = HFill 1
+space = SoftBreak <> HFill 1
 
 -- | Inserts a blank line unless one exists already.
 -- (@blankline <> blankline@ has the same effect as @blankline@.
@@ -205,48 +220,142 @@ toLines :: Maybe Int -> Doc -> (Dimensions, [Line])
 toLines linelen doc = (dimensions, ls)
  where
    (ls, dimensions) = evalRWS (extractLines doc) linelen startingState
-   startingState = undefined
+   startingState = RenderState
+     { stColumn = 0
+     , stLines  = []
+     , stCurrent = Nothing
+     }
 
-data RenderState = RenderState
+data RenderState =
+  RenderState
+  { stColumn      :: !Int
+  , stLines       :: [Doc]
+  , stCurrent     :: Maybe Doc
+  } deriving (Show)
 
 type Renderer = RWS (Maybe Int) Dimensions RenderState
 
 extractLines :: Doc -> Renderer [Line]
-extractLines = foldM reflowChunk [] . splitIntoChunks
+extractLines = fmap handleBoxes . reflowChunks .
+  removeTrailingBlankLines . splitIntoChunks
 
--- reversed lines...
+handleBoxes :: [Doc] -> [Line]
+handleBoxes = map (handleBox True)
+  where
+   handleBox beginLine d =
+    case d of
+      HFill n -> Line n (B.fromText $ T.replicate n " ")
+      Lit n t -> Line n (B.fromText t)
+      Empty -> mempty
+      SoftBreak -> mempty
+      LineBreak -> mempty
+      VFill _ -> mempty
+      Box Nothing a d -> undefined
+      Box (Just w) a d -> undefined
+      Chomp d -> undefined
+      Concat (HFill _) d2
+        | beginLine -> handleBox beginLine d2
+      Concat d1 d2 -> handleBox False d1 <> handleBox False d2
+
+
+-- this reverses the list back
+removeTrailingBlankLines :: [Doc] -> [Doc]
+removeTrailingBlankLines = reverse . dropWhile isBlankLine
+ where
+   isBlankLine Empty     = True
+   isBlankLine LineBreak = True
+   isBlankLine SoftBreak = True
+   isBlankLine HFill{}   = True
+   isBlankLine VFill{}   = True
+   isBlankLine _         = False
+
+-- note, reversed lines...
 splitIntoChunks :: Doc -> [Doc]
 splitIntoChunks doc =
   case getChunk doc Nothing [] of
     (Nothing, ds) -> ds
-    (Just _ , _)  -> error "splitIntoChunks returned Just"
+    (Just d, ds)  -> d:ds
 
 getChunk :: Doc -> Maybe Doc -> [Doc] -> (Maybe Doc, [Doc])
 getChunk doc Nothing ds =
   case doc of
     Empty -> (Nothing, ds)
-    LineBreak -> (Nothing, ds)
+    SoftBreak -> (Nothing, ds)
+    LineBreak -> (Nothing, doc:ds)
     VFill{} -> (Nothing, doc:ds)
     Concat d1 d2 ->
-      let (mbdoc', ds') = getChunk d1 Nothing ds
-       in getChunk d2 mbdoc' ds'
-    _ -> (Nothing, doc:ds)
+      case getChunk d1 Nothing ds of
+        (mbdoc', ds') -> getChunk d2 mbdoc' ds'
+    _ -> (Just doc, ds)
 getChunk doc (Just accum) ds =
   case doc of
     Empty -> (Nothing, accum:ds)
-    LineBreak -> (Nothing, accum:ds)
+    SoftBreak -> (Nothing, accum:ds)
+    LineBreak -> (Nothing, doc:accum:ds)
     VFill{} -> (Nothing, doc:accum:ds)
     Concat d1 d2 ->
       case getChunk d1 (Just accum) ds of
         (mbdoc', ds') -> getChunk d2 mbdoc' ds'
-    _ -> (Just (doc <> accum), ds)
+    _ -> (Just (accum <> doc), ds)
 
-reflowChunk :: [Line] -> Doc -> Renderer [Line]
-reflowChunk = undefined
+reflowChunks :: [Doc] -> Renderer [Doc]
+reflowChunks ds = do
+  mapM processDoc ds
+  current <- gets stCurrent
+  ls <- gets stLines
+  return $ reverse $
+    case current of
+      Just l  -> l:ls
+      Nothing -> ls
 
--- use this inside reflowChunk
-handleBoxes :: Line -> Renderer [Line]
-handleBoxes = undefined
+widthOf :: Doc -> Int
+widthOf d =
+  case d of
+    Empty -> 0
+    SoftBreak -> 0
+    LineBreak -> 0
+    HFill n -> n
+    VFill _ -> 0
+    Lit n _ -> n
+    Box Nothing _ d -> widthOf d
+    Box (Just w) _ _ -> w
+    Chomp d -> widthOf d
+    Concat d1 d2 -> widthOf d1 + widthOf d2
+
+processDoc :: Doc -> Renderer ()
+processDoc d = do
+  col <- gets stColumn
+  linelen <- ask
+  cur <- gets stCurrent
+  let w = widthOf d
+  case d of
+    LineBreak ->
+       modify $ \st ->
+         case stCurrent st of
+           Nothing -> st
+           Just cur ->
+             st{ stLines = cur : stLines st
+               , stCurrent = Nothing
+               , stColumn = 0 }
+    (VFill n) ->  -- TODO track blanks already made
+        modify $ \st ->
+           st{ stLines = replicate n mempty ++ maybe id (:) cur (stLines st)
+             , stCurrent = Nothing
+             , stColumn = 0 }
+    _ | maybe True (>= col + w) linelen || isNothing cur ->
+        modify $ \st ->
+          st{ stCurrent = Just $ fromMaybe mempty (stCurrent st) <> d
+            , stColumn = col + w
+            }
+      | otherwise ->
+        modify $ \st ->
+          st{ stLines = maybe id (:) (stCurrent st) $ stLines st
+            , stCurrent = Just d
+            , stColumn = w }  -- TODO hfill for nesting
+
+
+
+
 
 
 
