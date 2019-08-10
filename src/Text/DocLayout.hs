@@ -178,7 +178,7 @@ text :: String -> Doc
 text s =
   case break (=='\n') s of
     ([], [])     -> mempty
-    ([], (_:xs)) -> lit "" <> cr <> text xs
+    ([], (_:xs)) -> blankline <> text xs
     (xs, [])     -> lit xs
     (xs, (_:ys)) -> lit xs <> cr <> text ys
 
@@ -498,7 +498,7 @@ processDoc d = do
               AlLeft   -> doc
               AlCenter -> HFill ((ll - widthOf doc) `div` 2) <> doc
               AlRight  -> HFill (ll - widthOf doc) <> doc
-  case d of
+  case traceShowId d of
     PushAlignment al ->
       modify $ \st -> st{ stAlignment = al N.<| stAlignment st }
     PopAlignment ->
@@ -555,7 +555,7 @@ processDoc d = do
     _ -> return ()
 
 isPrintable :: Doc -> Bool
-isPrintable Lit{} = True
+isPrintable (Lit n _) = n > 0
 isPrintable Box{} = True
 isPrintable (Concat x y) = isPrintable x || isPrintable y
 isPrintable _ = False
