@@ -101,7 +101,9 @@ data Doc
   | Lit !Int !Text
   | PushNesting NestingChange
   | PopNesting
-  | Box !Int !Alignment Doc
+  | PushAlignment Alignment
+  | PopAlignment
+  | Box !Int Doc
   | Concat Doc Doc
   deriving (Show, Eq, Ord)
 
@@ -243,14 +245,11 @@ chomp d =
     LineBreak -> Empty
     HFill{} -> Empty
     VFill{} -> Empty
-    Lit{}   -> d
-    PushNesting{} -> d
-    PopNesting{} -> d
-    Box{} -> d
     Concat d1 d2 ->
       case chomp d2 of
         Empty -> chomp d1
         x -> d1 <> x
+    _ -> d
 
 --
 -- Code for dividing Doc into Lines (internal)
@@ -289,7 +288,7 @@ handleBoxes = map handleBox
     case d of
       HFill n -> Line n (B.fromText $ T.replicate n " ")
       Lit n t -> Line n (B.fromText t)
-      Box _ _ _ -> undefined
+      Box _ _ -> undefined
       Concat d1 d2 -> handleBox d1 <> handleBox d2
       _ -> mempty
 
@@ -312,30 +311,21 @@ splitIntoChunks doc =
     (Just d, ds)  -> d:ds
 
 getChunk :: Doc -> Maybe Doc -> [Doc] -> (Maybe Doc, [Doc])
-getChunk doc Nothing ds =
-  case doc of
-    Empty -> (Nothing, ds)
-    SoftBreak -> (Nothing, ds)
-    LineBreak -> (Nothing, doc:ds)
-    VFill{} -> (Nothing, doc:ds)
-    PushNesting{} -> (Nothing, doc:ds)
-    PopNesting{} -> (Nothing, doc:ds)
+getChunk doc mbaccum ds =
+  let ds' = maybe id (:) mbaccum $ ds
+  in case doc of
+    Empty -> (Nothing, ds')
+    SoftBreak -> (Nothing, ds')
+    LineBreak -> (Nothing, doc:ds')
+    VFill{} -> (Nothing, doc:ds')
+    PushNesting{} -> (Nothing, doc:ds')
+    PopNesting{} -> (Nothing, doc:ds')
+    PushAlignment{} -> (Nothing, doc:ds')
+    PopAlignment{} -> (Nothing, doc:ds')
     Concat d1 d2 ->
-      case getChunk d1 Nothing ds of
-        (mbdoc', ds') -> getChunk d2 mbdoc' ds'
-    _ -> (Just doc, ds)
-getChunk doc (Just accum) ds =
-  case doc of
-    Empty -> (Nothing, accum:ds)
-    SoftBreak -> (Nothing, accum:ds)
-    LineBreak -> (Nothing, doc:accum:ds)
-    VFill{} -> (Nothing, doc:accum:ds)
-    PushNesting{} -> (Nothing, doc:accum:ds)
-    PopNesting{} -> (Nothing, doc:accum:ds)
-    Concat d1 d2 ->
-      case getChunk d1 (Just accum) ds of
-        (mbdoc', ds') -> getChunk d2 mbdoc' ds'
-    _ -> (Just (accum <> doc), ds)
+      case getChunk d1 mbaccum ds of
+        (mbdoc', ds'') -> getChunk d2 mbdoc' ds''
+    _ -> (Just (maybe id (<>) mbaccum $ doc), ds)
 
 reflowChunks :: [Doc] -> Renderer [Doc]
 reflowChunks ds = do
@@ -352,7 +342,7 @@ widthOf d =
   case d of
     HFill n -> n
     Lit n _ -> n
-    Box w _ _ -> w
+    Box w _ -> w
     Concat d1 d2 -> widthOf d1 + widthOf d2
     _ -> 0
 
