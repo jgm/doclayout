@@ -403,7 +403,8 @@ handleBoxes = mconcat . map (mkLines False)
   where
   mkLines padRight d =
     case d of
-      HFill _ -> [Line 0 mempty] -- ignore final hfill
+      HFill n | padRight  -> [padLine n]
+              | otherwise -> [Line 0 mempty] -- ignore final hfill
       Lit n t -> [Line n (B.fromText t)]
       Box expandable w d'
               -> let (dimensions, ls) = toLines (Just w) d'
@@ -415,37 +416,29 @@ handleBoxes = mconcat . map (mkLines False)
                                 w' | w' <= w    -> id
                                 w' | expandable -> map (expand w')
                                 _               -> map (trunc w)
-                     pad = if padRight
-                              then map
-                                   (\(Line lw b) ->
-                                       if lw < w
-                                          then Line w (b <>
-                                            B.fromText (T.replicate (w - lw) " "))
-                                          else Line lw b)
-                              else id
-                 in pad $ adjust ls
-      Concat (HFill n) x -> combineLines padRight 0 0
-        [Line n (B.fromText $ T.replicate n " ")] (mkLines padRight x)
-      Concat d1 d2 -> combineLines padRight 0 0
+                 in adjust ls
+      Concat d1 d2 -> combineLines (widthOf d1) (widthOf d2)
                          (mkLines True d1) (mkLines False d2)
       _ -> [Line 0 mempty]
 
 -- Combine two lists of lines, adding blank filler if needed.
-combineLines :: Bool -> Int -> Int -> [Line] -> [Line] -> [Line]
-combineLines _ _ _ [] [] = []
-combineLines padRight xw yw [] (y:ys) =
-  Line xw (B.fromText $ T.replicate xw " ") <> y :
-    combineLines padRight xw (if yw == 0 then lineWidth y else yw) [] ys
-combineLines padRight xw yw (x:xs) [] =
-  x <> (if padRight
-           then Line xw (B.fromText $ T.replicate xw " ")
-           else Line 0 mempty) :
-    combineLines padRight (if xw == 0 then lineWidth x else xw) yw xs []
-combineLines padRight xw yw (x:xs) (y:ys) =
- x <> y : combineLines padRight
-           (if xw == 0 then lineWidth x else xw)
-           (if yw == 0 then lineWidth y else yw)
-           xs ys
+combineLines :: Int -> Int -> [Line] -> [Line] -> [Line]
+combineLines _ _ [] [] = []
+combineLines xw yw [] (y:ys) =
+  (if lineWidth y > 0
+      then padLine xw <> y
+      else y ) :
+  combineLines xw yw [] ys
+combineLines xw yw (x:xs) [] =
+  x : combineLines xw yw xs []
+combineLines xw yw (x:xs) (y:ys) =
+  let x' = if lineWidth y > 0 && lineWidth x < xw
+              then x <> padLine (xw - lineWidth x)
+              else x
+  in x' <> y : combineLines xw yw xs ys
+
+padLine :: Int -> Line
+padLine n = Line n $ B.fromText (T.replicate n " ")
 
 -- note, reversed lines...
 splitIntoChunks :: Doc -> [Doc]
