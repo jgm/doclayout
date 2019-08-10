@@ -417,8 +417,10 @@ handleBoxes = mconcat . map (mkLines False)
                                 w' | expandable -> map (expand w')
                                 _               -> map (trunc w)
                  in adjust ls
-      Concat d1 d2 -> combineLines (widthOf d1) (widthOf d2)
-                         (mkLines True d1) (mkLines False d2)
+      Concat d1 d2 ->
+          let d2lines = mkLines False d2
+           in combineLines (widthOf d1) (widthOf d2)
+                  (mkLines (not (null d2lines)) d1) (mkLines False d2)
       _ -> [Line 0 mempty]
 
 -- Combine two lists of lines, adding blank filler if needed.
@@ -498,7 +500,7 @@ processDoc d = do
               AlLeft   -> doc
               AlCenter -> HFill ((ll - widthOf doc) `div` 2) <> doc
               AlRight  -> HFill (ll - widthOf doc) <> doc
-  case traceShowId d of
+  case d of
     PushAlignment al ->
       modify $ \st -> st{ stAlignment = al N.<| stAlignment st }
     PopAlignment ->
