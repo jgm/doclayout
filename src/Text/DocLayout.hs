@@ -398,12 +398,12 @@ type Renderer = RWS (Maybe Int) Dimensions RenderState
 
 extractLines :: Doc -> Renderer [Line]
 extractLines =
-  fmap handleBoxes . reflowChunks . removeTrailingBlankLines . splitIntoChunks
+  fmap handleBoxes . reflowChunks . splitIntoChunks
 
 handleBoxes :: [Doc] -> [Line]
 handleBoxes = mconcat . map (mkLines False)
   where
-   mkLines padRight d =
+  mkLines padRight d =
     case d of
       HFill n -> [Line n (B.fromText $ T.replicate n " ")]
       Lit n t -> [Line n (B.fromText t)]
@@ -447,20 +447,9 @@ combineLines padRight xw yw (x:xs) (y:ys) =
            (if yw == 0 then lineWidth y else yw)
            xs ys
 
--- this reverses the list back
-removeTrailingBlankLines :: [Doc] -> [Doc]
-removeTrailingBlankLines = reverse . dropWhile isBlankLine
- where
-   isBlankLine Empty     = True
-   isBlankLine LineBreak = True
-   isBlankLine SoftBreak = True
-   isBlankLine HFill{}   = True
-   isBlankLine VFill{}   = True
-   isBlankLine _         = False
-
 -- note, reversed lines...
 splitIntoChunks :: Doc -> [Doc]
-splitIntoChunks doc =
+splitIntoChunks doc = reverse $
   case getChunk doc Nothing [] of
     (Nothing, ds) -> ds
     (Just d, ds)  -> d:ds
@@ -487,7 +476,7 @@ reflowChunks ds = do
   mapM processDoc ds
   current <- gets stCurrent
   ls <- gets stLines
-  return $ reverse $
+  return $ reverse $ dropWhile isEmpty $ -- TODO more efficient way?
     case current of
       Just l  -> l:ls
       Nothing -> ls
