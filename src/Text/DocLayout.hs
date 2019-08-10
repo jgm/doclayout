@@ -474,7 +474,7 @@ reflowChunks ds = do
   mapM processDoc ds
   current <- gets stCurrent
   ls <- gets stLines
-  return $ reverse $ dropWhile isEmpty $
+  return $ dropWhile isEmpty $ reverse $ dropWhile isEmpty $
     case current of
       Just l  -> l:ls
       Nothing -> ls
