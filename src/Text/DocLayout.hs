@@ -101,8 +101,7 @@ data Doc
   | Lit !Int !Text
   | PushNesting NestingChange
   | PopNesting
-  | Box !(Maybe Int) !Alignment Doc
-  | Chomp Doc
+  | Box !Int !Alignment Doc
   | Concat Doc Doc
   deriving (Show, Eq, Ord)
 
@@ -263,16 +262,14 @@ extractLines = fmap handleBoxes . reflowChunks .
   removeTrailingBlankLines . splitIntoChunks
 
 handleBoxes :: [Doc] -> [Line]
-handleBoxes = map (handleBox True)
+handleBoxes = map handleBox
   where
-   handleBox beginLine d =
+   handleBox d =
     case d of
       HFill n -> Line n (B.fromText $ T.replicate n " ")
       Lit n t -> Line n (B.fromText t)
-      Box Nothing a d -> undefined
-      Box (Just w) a d -> undefined
-      Chomp d -> undefined
-      Concat d1 d2 -> handleBox False d1 <> handleBox False d2
+      Box w a d -> undefined
+      Concat d1 d2 -> handleBox d1 <> handleBox d2
       _ -> mempty
 
 -- this reverses the list back
@@ -334,9 +331,7 @@ widthOf d =
   case d of
     HFill n -> return n
     Lit n _ -> return n
-    Box Nothing _ d -> widthOf d
-    Box (Just w) _ _ -> return w
-    Chomp d -> widthOf d
+    Box w _ _ -> return w
     Concat d1 d2 -> (+) <$> widthOf d1 <*> widthOf d2
     PushNesting (IncreaseNesting n) -> do
       modify $ \st -> st{ stNesting = N.head (stNesting st) + n N.<| stNesting st }
