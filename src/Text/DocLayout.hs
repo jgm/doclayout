@@ -12,8 +12,8 @@ module Text.DocLayout (
      , Dimensions(..)
      , Alignment(..)
      , NestingChange(..)
-     , render
-     , getDimensions
+--     , render
+--     , getDimensions
      , cr
      , blankline
      , blanklines
@@ -70,6 +70,8 @@ where
 import Data.Maybe (fromMaybe, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Sequence as Seq
+import Data.Sequence (Seq, (<|), (|>), ViewL(..))
 import qualified Data.List.NonEmpty as N
 import Data.String
 import Data.List (foldl', transpose, intersperse)
@@ -81,7 +83,6 @@ import Data.String.Conversions (ConvertibleStrings(..), LazyText)
 #else
 import Data.Semigroup (Semigroup)
 #endif
-
 import Debug.Trace
 
 data Alignment = AlLeft | AlRight | AlCenter
@@ -92,9 +93,8 @@ data NestingChange =
   | SetNesting !Int
   deriving (Show, Eq, Ord)
 
-data Doc
-  = Empty
-  | SoftBreak
+data D
+  = SoftBreak
   | LineBreak
   | HFill !Int
   | VFill !Int
@@ -103,35 +103,27 @@ data Doc
   | PopNesting
   | Box !(Maybe Int) !Alignment Doc
   | Chomp Doc
-  | Concat Doc Doc
+  deriving (Show, Eq, Ord)
+
+newtype Doc = Doc{ unDoc :: Seq D }
   deriving (Show, Eq, Ord)
 
 instance Semigroup Doc where
-  -- ensure that the leftmost element is accessible immediately
-  (Concat w x) <> y = Concat w (Concat x y)
-  Lit n1 t1 <> Lit n2 t2 = Lit (n1 + n2) (t1 <> t2)
-  LineBreak <> LineBreak = LineBreak
-  SoftBreak <> SoftBreak = SoftBreak
-  LineBreak <> SoftBreak = LineBreak
-  SoftBreak <> LineBreak = LineBreak
-  VFill m <> VFill n = VFill (max m n)
-  LineBreak <> VFill m = VFill m
-  VFill m <> LineBreak = VFill m
-  x <> Empty = x
-  Empty <> x = x
-  x <> y = Concat x y
+  Doc ds1 <> Doc ds2 = Doc (ds1 <> ds2)
 
 instance Monoid Doc where
   mappend = (<>)
-  mempty  = Empty
+  mempty  = Doc mempty
 
 instance IsString Doc where
   fromString = text
 
+{-
 -- | Render a Doc with an optional width.
 render :: ConvertibleStrings LazyText a => Maybe Int -> Doc -> a
 render linelen = convertString . B.toLazyText . mconcat .
   intersperse (B.fromText "\n") .  map lineContents . snd . toLines linelen
+-}
 
 data Line =
   Line
@@ -160,13 +152,18 @@ instance Monoid Dimensions where
   mappend = (<>)
   mempty = Dimensions 0 0
 
+{-
 -- | Returns (width, height) of Doc.
 getDimensions :: Maybe Int -> Doc -> Dimensions
 getDimensions linelen = fst . toLines linelen
+-}
 
 --
 -- Constructors for Doc
 --
+
+single :: D -> Doc
+single = Doc . Seq.singleton
 
 -- | A literal string, possibly including newlines.
 text :: String -> Doc
@@ -179,34 +176,36 @@ text s =
 
 -- | A raw string, assumed not to include newlines.
 lit :: String -> Doc
-lit s  = Lit (realLength s) (T.pack s)
+lit s  = single $ Lit (realLength s) (T.pack s)
 
 -- | A carriage return.  Does nothing if we're at the beginning of
 -- a line; otherwise inserts a newline.
 cr :: Doc
-cr = LineBreak
+cr = single LineBreak
 
 -- | A breaking (reflowable) space.
 space :: Doc
-space = SoftBreak <> HFill 1
+space = Doc $ Seq.fromList [ SoftBreak, HFill 1 ]
 
 -- | Inserts a blank line unless one exists already.
 -- (@blankline <> blankline@ has the same effect as @blankline@.
 blankline :: Doc
-blankline = VFill 1
+blankline = single (VFill 1)
 
 -- | Inserts blank lines unless they exist already.
 -- (@blanklines m <> blanklines n@ has the same effect as @blanklines (max m n)@.
 blanklines :: Int -> Doc
-blanklines n = VFill n
+blanklines n = single (VFill n)
 
 -- | Makes a 'Doc' flush against the left margin.
 flush :: Doc -> Doc
-flush doc = PushNesting (SetNesting 0) <> doc <> PopNesting
+flush doc =
+  single (PushNesting (SetNesting 0)) <> doc <> single PopNesting
 
 -- | Indents a 'Doc' by the specified number of spaces.
 nest :: Int -> Doc -> Doc
-nest ind doc = PushNesting (IncreaseNesting ind) <> doc <> PopNesting
+nest ind doc =
+  single (PushNesting (IncreaseNesting ind)) <> doc <> single PopNesting
 
 -- | A hanging indent. @hang ind start doc@ prints @start@,
 -- then @doc@, leaving an indent of @ind@ spaces on every
@@ -231,27 +230,24 @@ infixr 6 <+>
 hsep :: [Doc] -> Doc
 hsep = foldr (<+>) mempty
 
-
 --
 -- Code for dividing Doc into Lines (internal)
 --
 
 -- Divides Doc into Lines, and also returns doc dimensions (width, height).
-toLines :: Maybe Int -> Doc -> (Dimensions, [Line])
-toLines linelen doc = (dimensions, ls)
- where
-   (ls, dimensions) = evalRWS (extractLines doc) linelen startingState
-   startingState = RenderState
-     { stColumn = 0
-     , stLines  = []
-     , stCurrent = Nothing
-     , stNesting = N.fromList [0]
-     }
+-- toLines :: Maybe Int -> Doc -> (Dimensions, [Line])
+-- toLines linelen doc = (dimensions, ls)
+--  where
+--    (ls, dimensions) = evalRWS (extractLines doc) linelen startingState
+--    startingState = RenderState
+--      { stColumn = 0
+--      , stCurrent = Nothing
+--      , stNesting = N.fromList [0]
+--      }
 
 data RenderState =
   RenderState
   { stColumn      :: !Int
-  , stLines       :: [Doc]
   , stCurrent     :: Maybe Doc
   , stNesting     :: N.NonEmpty Int
   } deriving (Show)
@@ -259,141 +255,121 @@ data RenderState =
 type Renderer = RWS (Maybe Int) Dimensions RenderState
 
 extractLines :: Doc -> Renderer [Line]
-extractLines = fmap handleBoxes . reflowChunks .
-  removeTrailingBlankLines . splitIntoChunks
+extractLines = fmap handleBoxes . reflowChunks . splitIntoChunks
 
 handleBoxes :: [Doc] -> [Line]
-handleBoxes = map (handleBox True)
-  where
-   handleBox beginLine d =
-    case d of
-      HFill n -> Line n (B.fromText $ T.replicate n " ")
-      Lit n t -> Line n (B.fromText t)
-      Box Nothing a d -> undefined
-      Box (Just w) a d -> undefined
-      Chomp d -> undefined
-      Concat d1 d2 -> handleBox False d1 <> handleBox False d2
-      _ -> mempty
+handleBoxes = undefined
+-- map handleBox
+--   where
+--    handleBox d =
+--     case d of
+--       HFill n -> Line n (B.fromText $ T.replicate n " ")
+--       Lit n t -> Line n (B.fromText t)
+--       Box Nothing a d -> undefined
+--       Box (Just w) a d -> undefined
+--       Chomp d -> undefined
+--       _ -> mempty
 
--- this reverses the list back
+-- assumes reversed list
 removeTrailingBlankLines :: [Doc] -> [Doc]
 removeTrailingBlankLines = reverse . dropWhile isBlankLine
  where
-   isBlankLine Empty     = True
-   isBlankLine LineBreak = True
-   isBlankLine SoftBreak = True
-   isBlankLine HFill{}   = True
-   isBlankLine VFill{}   = True
-   isBlankLine _         = False
+   isBlankLine = all isBlank . unDoc
+   isBlank LineBreak = True
+   isBlank SoftBreak = True
+   isBlank HFill{}   = True
+   isBlank VFill{}   = True
+   isBlank _         = False
 
--- note, reversed lines...
 splitIntoChunks :: Doc -> [Doc]
-splitIntoChunks doc =
-  case getChunk doc Nothing [] of
-    (Nothing, ds) -> ds
-    (Just d, ds)  -> d:ds
+splitIntoChunks ds =
+  if null as
+     then
+       case Seq.viewl bs of
+         EmptyL          -> []
+         SoftBreak :< ys -> splitIntoChunks (Doc ys)
+         LineBreak :< ys -> single LineBreak : splitIntoChunks (Doc ys)
+         VFill n :< ys   -> single (VFill n) : splitIntoChunks (Doc ys)
+         _               -> error "Shouldn't happen"
+     else
+       case Seq.viewl bs of
+         EmptyL          -> [Doc as]
+         SoftBreak :< ys -> Doc as : splitIntoChunks (Doc ys)
+         LineBreak :< ys -> Doc as : single LineBreak :
+                               splitIntoChunks (Doc ys)
+         VFill n :< ys   -> Doc as : single (VFill n) :
+                               splitIntoChunks (Doc ys)
+         _               -> error "Shouldn't happen"
+  where
+    (as, bs) = Seq.breakl isLineSep (unDoc ds)
+    isLineSep SoftBreak = True
+    isLineSep LineBreak = True
+    isLineSep VFill{}   = True
+    isLineSep _         = False
 
-getChunk :: Doc -> Maybe Doc -> [Doc] -> (Maybe Doc, [Doc])
-getChunk doc Nothing ds =
-  case doc of
-    Empty -> (Nothing, ds)
-    SoftBreak -> (Nothing, ds)
-    LineBreak -> (Nothing, doc:ds)
-    VFill{} -> (Nothing, doc:ds)
-    PushNesting{} -> (Nothing, doc:ds)
-    PopNesting{} -> (Nothing, doc:ds)
-    Concat d1 d2 ->
-      case getChunk d1 Nothing ds of
-        (mbdoc', ds') -> getChunk d2 mbdoc' ds'
-    _ -> (Just doc, ds)
-getChunk doc (Just accum) ds =
-  case doc of
-    Empty -> (Nothing, accum:ds)
-    SoftBreak -> (Nothing, accum:ds)
-    LineBreak -> (Nothing, doc:accum:ds)
-    VFill{} -> (Nothing, doc:accum:ds)
-    PushNesting{} -> (Nothing, doc:accum:ds)
-    PopNesting{} -> (Nothing, doc:accum:ds)
-    Concat d1 d2 ->
-      case getChunk d1 (Just accum) ds of
-        (mbdoc', ds') -> getChunk d2 mbdoc' ds'
-    _ -> (Just (accum <> doc), ds)
+{-
+widthOf :: D -> Int
+widthOf d =
+  case d of
+    HFill n -> n
+    Lit n _ -> n
+    Box Nothing _ d -> docWidth $ getDimensions d
+    Box (Just w) _ _ -> w
+    Chomp d -> docWidth $ getDimensions d
+    _ -> 0
+-}
 
+-- marshall the chunks into lines
 reflowChunks :: [Doc] -> Renderer [Doc]
 reflowChunks ds = do
-  mapM processDoc ds
+  ls <- foldM processChunk [] ds
   current <- gets stCurrent
-  ls <- gets stLines
-  return $ reverse $
+  return $ reverse $ removeTrailingBlankLines $
     case current of
       Just l  -> l:ls
       Nothing -> ls
 
-widthOf :: Doc -> Renderer Int
-widthOf d =
-  case d of
-    HFill n -> return n
-    Lit n _ -> return n
-    Box Nothing _ d -> widthOf d
-    Box (Just w) _ _ -> return w
-    Chomp d -> widthOf d
-    Concat d1 d2 -> (+) <$> widthOf d1 <*> widthOf d2
-    PushNesting (IncreaseNesting n) -> do
-      modify $ \st -> st{ stNesting = N.head (stNesting st) + n N.<| stNesting st }
-      return 0
-    PushNesting (SetNesting n) -> do
-      modify $ \st -> st{ stNesting = n N.<| stNesting st }
-      return 0
-    PopNesting -> do
-      modify $ \st -> st{ stNesting =
-                          case N.uncons (stNesting st) of
-                            (_, Just l) -> l
-                            (_, Nothing) -> stNesting st }
-      return 0
-    _ -> return 0
-
-processDoc :: Doc -> Renderer ()
-processDoc d = do
-  col <- gets stColumn
-  linelen <- ask
-  mbcur <- gets stCurrent
-  w <- widthOf d
-  nesting <- N.head <$> gets stNesting
-  case d of
-    LineBreak ->
-       modify $ \st ->
-         case mbcur of
-           Nothing -> st
-           Just cur ->
-             st{ stLines = cur : stLines st
-               , stCurrent = Nothing
-               , stColumn = 0 }
-    VFill n ->  -- TODO track blanks already made
-        modify $ \st ->
-           st{ stLines = replicate n mempty ++ maybe id (:) mbcur (stLines st)
-             , stCurrent = Nothing
-             , stColumn = 0 }
-    _ ->
-      case mbcur of
-        Just cur
-          | maybe False (< col + w) linelen -> do -- doesn't fit, create line
-             let d' = case d of
-                        Concat (HFill _) x -> x
-                        _ -> d
-             modify $ \st ->
-               st{ stLines = cur : stLines st
-                 , stCurrent = Just (HFill nesting <> d')
-                 , stColumn = w }  -- TODO hfill for nesting
-          | otherwise -> -- fits
-             modify $ \st ->
-               st{ stCurrent = Just (cur <> d)
-                 , stColumn = col + w }
-        Nothing ->  -- nothing yet on line
-          modify $ \st ->
-            st{ stLines = stLines st
-              , stCurrent = Just (HFill nesting <> d)
-              , stColumn = w }  -- TODO hfill for nesting
-
+processChunk :: [Doc] -> Doc -> Renderer [Doc]
+processChunk d = undefined -- do
+--   col <- gets stColumn
+--   linelen <- ask
+--   mbcur <- gets stCurrent
+--   w <- widthOf d
+--   nesting <- N.head <$> gets stNesting
+--   case d of
+--     LineBreak ->
+--        modify $ \st ->
+--          case mbcur of
+--            Nothing -> st
+--            Just cur ->
+--              st{ stLines = cur : stLines st
+--                , stCurrent = Nothing
+--                , stColumn = 0 }
+--     VFill n ->  -- TODO track blanks already made
+--         modify $ \st ->
+--            st{ stLines = replicate n mempty ++ maybe id (:) mbcur (stLines st)
+--              , stCurrent = Nothing
+--              , stColumn = 0 }
+--     _ ->
+--       case mbcur of
+--         Just cur
+--           | maybe False (< col + w) linelen -> do -- doesn't fit, create line
+--              let d' = case d of
+--                         Concat (HFill _) x -> x
+--                         _ -> d
+--              modify $ \st ->
+--                st{ stLines = cur : stLines st
+--                  , stCurrent = Just (HFill nesting <> d')
+--                  , stColumn = w }  -- TODO hfill for nesting
+--           | otherwise -> -- fits
+--              modify $ \st ->
+--                st{ stCurrent = Just (cur <> d)
+--                  , stColumn = col + w }
+--         Nothing ->  -- nothing yet on line
+--           modify $ \st ->
+--             st{ stLines = stLines st
+--               , stCurrent = Just (HFill nesting <> d)
+--               , stColumn = w }  -- TODO hfill for nesting
 
 
 
@@ -477,10 +453,10 @@ render linelen = convertString . B.toLazyText . mconcat .
                  map buildLine .  snd .  buildLines linelen
 
 -- | Returns (width, height) of Doc.
-getDimensions :: Maybe Int -> Doc -> (Int, Int)
-getDimensions linelen doc = (w, length ls)  -- width x height
-  where
-   (w, ls) = buildLines linelen doc
+-- getDimensions :: Maybe Int -> Doc -> (Int, Int)
+-- getDimensions linelen doc = (w, length ls)  -- width x height
+--   where
+--    (w, ls) = buildLines linelen doc
 
 buildLines :: Maybe Int -> Doc -> (Int, [Line])
 buildLines linelen doc =
