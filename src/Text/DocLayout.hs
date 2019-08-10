@@ -12,8 +12,8 @@ module Text.DocLayout (
      , Dimensions(..)
      , Alignment(..)
      , NestingChange(..)
---     , render
---     , getDimensions
+     , render
+     , getDimensions
      , cr
      , blankline
      , blanklines
@@ -101,8 +101,7 @@ data D
   | Lit !Int !Text
   | PushNesting NestingChange
   | PopNesting
-  | Box !(Maybe Int) !Alignment Doc
-  | Chomp Doc
+  | Box !Int !Alignment Doc
   deriving (Show, Eq, Ord)
 
 newtype Doc = Doc{ unDoc :: Seq D }
@@ -118,12 +117,10 @@ instance Monoid Doc where
 instance IsString Doc where
   fromString = text
 
-{-
 -- | Render a Doc with an optional width.
 render :: ConvertibleStrings LazyText a => Maybe Int -> Doc -> a
 render linelen = convertString . B.toLazyText . mconcat .
   intersperse (B.fromText "\n") .  map lineContents . snd . toLines linelen
--}
 
 data Line =
   Line
@@ -152,11 +149,9 @@ instance Monoid Dimensions where
   mappend = (<>)
   mempty = Dimensions 0 0
 
-{-
 -- | Returns (width, height) of Doc.
 getDimensions :: Maybe Int -> Doc -> Dimensions
 getDimensions linelen = fst . toLines linelen
--}
 
 --
 -- Constructors for Doc
@@ -235,15 +230,15 @@ hsep = foldr (<+>) mempty
 --
 
 -- Divides Doc into Lines, and also returns doc dimensions (width, height).
--- toLines :: Maybe Int -> Doc -> (Dimensions, [Line])
--- toLines linelen doc = (dimensions, ls)
---  where
---    (ls, dimensions) = evalRWS (extractLines doc) linelen startingState
---    startingState = RenderState
---      { stColumn = 0
---      , stCurrent = Nothing
---      , stNesting = N.fromList [0]
---      }
+toLines :: Maybe Int -> Doc -> (Dimensions, [Line])
+toLines linelen doc = (dimensions, ls)
+ where
+   (ls, dimensions) = evalRWS (extractLines doc) linelen startingState
+   startingState = RenderState
+     { stColumn = 0
+     , stCurrent = Nothing
+     , stNesting = N.fromList [0]
+     }
 
 data RenderState =
   RenderState
@@ -258,17 +253,15 @@ extractLines :: Doc -> Renderer [Line]
 extractLines = fmap handleBoxes . reflowChunks . splitIntoChunks
 
 handleBoxes :: [Doc] -> [Line]
-handleBoxes = undefined
--- map handleBox
---   where
---    handleBox d =
---     case d of
---       HFill n -> Line n (B.fromText $ T.replicate n " ")
---       Lit n t -> Line n (B.fromText t)
---       Box Nothing a d -> undefined
---       Box (Just w) a d -> undefined
---       Chomp d -> undefined
---       _ -> mempty
+handleBoxes = map handleBox
+   where
+     handleBox = foldMap handleD . unDoc
+     handleD d =
+       case d of
+         HFill n -> Line n (B.fromText $ T.replicate n " ")
+         Lit n t -> Line n (B.fromText t)
+         Box w a d -> undefined
+         _ -> mempty
 
 -- assumes reversed list
 removeTrailingBlankLines :: [Doc] -> [Doc]
@@ -307,17 +300,16 @@ splitIntoChunks ds =
     isLineSep VFill{}   = True
     isLineSep _         = False
 
-{-
 widthOf :: D -> Int
 widthOf d =
   case d of
-    HFill n -> n
-    Lit n _ -> n
-    Box Nothing _ d -> docWidth $ getDimensions d
-    Box (Just w) _ _ -> w
-    Chomp d -> docWidth $ getDimensions d
-    _ -> 0
--}
+    HFill n   -> n
+    Lit n _   -> n
+    Box w _ _ -> w
+    _         -> 0
+
+widthOfDoc :: Doc -> Int
+widthOfDoc = foldr ((+) . widthOf) 0 . unDoc
 
 -- marshall the chunks into lines
 reflowChunks :: [Doc] -> Renderer [Doc]
@@ -330,46 +322,49 @@ reflowChunks ds = do
       Nothing -> ls
 
 processChunk :: [Doc] -> Doc -> Renderer [Doc]
-processChunk d = undefined -- do
---   col <- gets stColumn
---   linelen <- ask
---   mbcur <- gets stCurrent
---   w <- widthOf d
---   nesting <- N.head <$> gets stNesting
---   case d of
---     LineBreak ->
---        modify $ \st ->
---          case mbcur of
---            Nothing -> st
---            Just cur ->
---              st{ stLines = cur : stLines st
---                , stCurrent = Nothing
---                , stColumn = 0 }
---     VFill n ->  -- TODO track blanks already made
---         modify $ \st ->
---            st{ stLines = replicate n mempty ++ maybe id (:) mbcur (stLines st)
---              , stCurrent = Nothing
---              , stColumn = 0 }
---     _ ->
---       case mbcur of
---         Just cur
---           | maybe False (< col + w) linelen -> do -- doesn't fit, create line
---              let d' = case d of
---                         Concat (HFill _) x -> x
---                         _ -> d
---              modify $ \st ->
---                st{ stLines = cur : stLines st
---                  , stCurrent = Just (HFill nesting <> d')
---                  , stColumn = w }  -- TODO hfill for nesting
---           | otherwise -> -- fits
---              modify $ \st ->
---                st{ stCurrent = Just (cur <> d)
---                  , stColumn = col + w }
---         Nothing ->  -- nothing yet on line
---           modify $ \st ->
---             st{ stLines = stLines st
---               , stCurrent = Just (HFill nesting <> d)
---               , stColumn = w }  -- TODO hfill for nesting
+processChunk ds d = do
+  col <- gets stColumn
+  linelen <- ask
+  mbcur <- gets stCurrent
+  let w = widthOfDoc d
+  nesting <- N.head <$> gets stNesting
+  case Seq.viewl (unDoc d) of
+    LineBreak :< _ ->
+      case mbcur of
+        Nothing -> return ds
+        Just cur -> do
+          modify $ \st ->
+             st{ stCurrent = Nothing
+               , stColumn = 0 }
+          return $ cur : ds
+    VFill n :< _ ->  do -- TODO track blanks already made
+      modify $ \st ->
+          st{ stCurrent = Nothing
+            , stColumn = 0 }
+      case mbcur of
+        Nothing  -> return $ replicate n mempty ++ ds
+        Just cur -> return $ replicate n mempty ++ (cur : ds)
+    _ ->
+      case mbcur of
+        Just cur | maybe False (< (col + w)) linelen
+          -> do -- doesn't fit, create line
+             let d' = case Seq.viewl (unDoc d) of
+                        (HFill _) :< x -> Doc x
+                        _              -> d
+             modify $ \st ->
+               st{ stCurrent = Just (single (HFill nesting) <> d')
+                 , stColumn = w }  -- TODO hfill for nesting
+             return $ cur : ds
+          | otherwise -> do -- fits, add to curline
+             modify $ \st ->
+               st{ stCurrent = Just (cur <> d)
+                 , stColumn = col + w }
+             return ds
+        Nothing -> do -- nothing yet on line
+          modify $ \st ->
+            st{ stCurrent = Just (single (HFill nesting) <> d)
+              , stColumn = w }  -- TODO hfill for nesting
+          return ds
 
 
 
