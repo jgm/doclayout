@@ -279,6 +279,8 @@ getChunk doc Nothing ds =
     SoftBreak -> (Nothing, ds)
     LineBreak -> (Nothing, doc:ds)
     VFill{} -> (Nothing, doc:ds)
+    PushNesting{} -> (Nothing, doc:ds)
+    PopNesting{} -> (Nothing, doc:ds)
     Concat d1 d2 ->
       case getChunk d1 Nothing ds of
         (mbdoc', ds') -> getChunk d2 mbdoc' ds'
@@ -289,6 +291,8 @@ getChunk doc (Just accum) ds =
     SoftBreak -> (Nothing, accum:ds)
     LineBreak -> (Nothing, doc:accum:ds)
     VFill{} -> (Nothing, doc:accum:ds)
+    PushNesting{} -> (Nothing, doc:accum:ds)
+    PopNesting{} -> (Nothing, doc:accum:ds)
     Concat d1 d2 ->
       case getChunk d1 (Just accum) ds of
         (mbdoc', ds') -> getChunk d2 mbdoc' ds'
@@ -334,7 +338,6 @@ processDoc d = do
   mbcur <- gets stCurrent
   w <- widthOf d
   nesting <- N.head <$> gets stNesting
-  return $! traceShowId nesting
   case d of
     LineBreak ->
        modify $ \st ->
@@ -352,10 +355,13 @@ processDoc d = do
     _ ->
       case mbcur of
         Just cur
-          | maybe False (< col + w) linelen ->  -- doesn't fit
+          | maybe False (< col + w) linelen -> do -- doesn't fit, create line
+             let d' = case d of
+                        Concat (HFill _) x -> x
+                        _ -> d
              modify $ \st ->
                st{ stLines = cur : stLines st
-                 , stCurrent = Just (HFill nesting <> d)
+                 , stCurrent = Just (HFill nesting <> d')
                  , stColumn = w }  -- TODO hfill for nesting
           | otherwise -> -- fits
              modify $ \st ->
@@ -364,7 +370,7 @@ processDoc d = do
         Nothing ->  -- nothing yet on line
           modify $ \st ->
             st{ stLines = stLines st
-              , stCurrent = traceShowId $ Just (HFill nesting <> d)
+              , stCurrent = Just (HFill nesting <> d)
               , stColumn = w }  -- TODO hfill for nesting
 
 
