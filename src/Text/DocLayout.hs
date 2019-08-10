@@ -22,7 +22,7 @@ module Text.DocLayout (
      , lit
 --     , vfill
      , char
---     , box
+     , box
 --     , resizableBox
 --     , prefixed
      , flush
@@ -46,7 +46,7 @@ module Text.DocLayout (
      , (<+>)
      , ($$)
      , ($+$)
---     , isEmpty
+     , isEmpty
      , empty
      , cat
      , hcat
@@ -281,6 +281,12 @@ alignCenter doc =
 empty :: Doc
 empty = mempty
 
+-- | True if the document is empty.
+isEmpty :: Doc -> Bool
+isEmpty Empty = True
+isEmpty _     = False
+
+
 infixr 5 $$
 -- | @a $$ b@ puts @a@ above @b@.
 ($$) :: Doc -> Doc -> Doc
@@ -298,6 +304,11 @@ vcat = foldr ($$) empty
 -- | List version of '$+$'.
 vsep :: [Doc] -> Doc
 vsep = foldr ($+$) empty
+
+-- | A box with the specified width.  If content can't fit
+-- in the width, it is silently truncated.
+box :: Int -> Doc -> Doc
+box n doc = Box n doc
 
 -- | Makes a 'Doc' non-reflowable.
 nowrap :: Doc -> Doc
@@ -366,19 +377,44 @@ data RenderState =
 type Renderer = RWS (Maybe Int) Dimensions RenderState
 
 extractLines :: Doc -> Renderer [Line]
-extractLines = fmap handleBoxes . reflowChunks .
-  removeTrailingBlankLines . splitIntoChunks
+extractLines =
+  fmap handleBoxes . reflowChunks . removeTrailingBlankLines . splitIntoChunks
 
 handleBoxes :: [Doc] -> [Line]
-handleBoxes = map handleBox
+handleBoxes = mconcat . map (mkLines False)
   where
-   handleBox d =
+   mkLines padRight d =
     case d of
-      HFill n -> Line n (B.fromText $ T.replicate n " ")
-      Lit n t -> Line n (B.fromText t)
-      Box _ _ -> undefined
-      Concat d1 d2 -> handleBox d1 <> handleBox d2
-      _ -> mempty
+      HFill n -> [Line n (B.fromText $ T.replicate n " ")]
+      Lit n t -> [Line n (B.fromText t)]
+      Box w d' -> (if padRight
+                      then map
+                          (\(Line lw b) ->
+                             if lw < w
+                                then Line w (b <>
+                                      B.fromText (T.replicate (w - lw) " "))
+                                else Line lw b)
+                      else id) $ snd $ toLines (Just w) d'
+      Concat d1 d2 -> combineLines padRight 0 0
+                         (mkLines True d1) (mkLines False d2)
+      _ -> [Line 0 mempty]
+
+-- Combine two lists of lines, adding blank filler if needed.
+combineLines :: Bool -> Int -> Int -> [Line] -> [Line] -> [Line]
+combineLines _ _ _ [] [] = []
+combineLines padRight xw yw [] (y:ys) =
+  Line xw (B.fromText $ T.replicate xw " ") <> y :
+    combineLines padRight xw (if yw == 0 then lineWidth y else yw) [] ys
+combineLines padRight xw yw (x:xs) [] =
+  x <> (if padRight
+           then Line xw (B.fromText $ T.replicate xw " ")
+           else Line 0 mempty) :
+    combineLines padRight (if xw == 0 then lineWidth x else xw) yw xs []
+combineLines padRight xw yw (x:xs) (y:ys) =
+ x <> y : combineLines padRight
+           (if xw == 0 then lineWidth x else xw)
+           (if yw == 0 then lineWidth y else yw)
+           xs ys
 
 -- this reverses the list back
 removeTrailingBlankLines :: [Doc] -> [Doc]
@@ -439,7 +475,16 @@ processDoc d = do
   col <- gets stColumn
   linelen <- ask
   mbcur <- gets stCurrent
-  let w = widthOf d
+  nesting <- N.head <$> gets stNesting
+  alignment <- N.head <$> gets stAlignment
+  let addAlignment doc =
+        case linelen of
+          Nothing  -> doc
+          Just ll  ->
+            case alignment of
+              AlLeft   -> doc
+              AlCenter -> HFill ((ll - widthOf doc) `div` 2) <> doc
+              AlRight  -> HFill (ll - widthOf doc) <> doc
   case d of
     PushAlignment al ->
       modify $ \st -> st{ stAlignment = al N.<| stAlignment st }
@@ -458,18 +503,6 @@ processDoc d = do
                           case N.uncons (stNesting st) of
                             (_, Just l) -> l
                             (_, Nothing) -> stNesting st }
-    _ -> return ()
-  nesting <- N.head <$> gets stNesting
-  alignment <- N.head <$> gets stAlignment
-  let addAlignment doc =
-        case linelen of
-          Nothing  -> doc
-          Just ll  ->
-            case alignment of
-              AlLeft   -> doc
-              AlCenter -> HFill ((ll - widthOf doc) `div` 2) <> doc
-              AlRight  -> HFill (ll - widthOf doc) <> doc
-  case d of
     LineBreak ->
        modify $ \st ->
          case mbcur of
@@ -485,7 +518,8 @@ processDoc d = do
                            mbcur (stLines st)
              , stCurrent = Nothing
              , stColumn = 0 }
-    _ ->
+    _ | isPrintable d -> do
+      let w = widthOf d
       case mbcur of
         Just cur
           | maybe False (< col + w) linelen -> do -- doesn't fit, create line
@@ -505,8 +539,13 @@ processDoc d = do
             st{ stLines = stLines st
               , stCurrent = Just (HFill nesting <> d)
               , stColumn = w }  -- TODO hfill for nesting
+    _ -> return ()
 
-
+isPrintable :: Doc -> Bool
+isPrintable Lit{} = True
+isPrintable Box{} = True
+isPrintable (Concat x y) = isPrintable x || isPrintable y
+isPrintable _ = False
 
 {-
 newtype Doc = Doc{ unDoc :: Seq D }
