@@ -70,7 +70,7 @@ where
 import Data.Maybe (fromMaybe, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
--- import qualified Data.List.NonEmpty as N
+import qualified Data.List.NonEmpty as N
 import Data.String
 import Data.List (foldl', transpose, intersperse)
 import Control.Monad.RWS.Strict
@@ -224,6 +224,7 @@ toLines linelen doc = (dimensions, ls)
      { stColumn = 0
      , stLines  = []
      , stCurrent = Nothing
+     , stNesting = N.fromList [0]
      }
 
 data RenderState =
@@ -231,6 +232,7 @@ data RenderState =
   { stColumn      :: !Int
   , stLines       :: [Doc]
   , stCurrent     :: Maybe Doc
+  , stNesting     :: N.NonEmpty Int
   } deriving (Show)
 
 type Renderer = RWS (Maybe Int) Dimensions RenderState
@@ -246,17 +248,11 @@ handleBoxes = map (handleBox True)
     case d of
       HFill n -> Line n (B.fromText $ T.replicate n " ")
       Lit n t -> Line n (B.fromText t)
-      Empty -> mempty
-      SoftBreak -> mempty
-      LineBreak -> mempty
-      VFill _ -> mempty
       Box Nothing a d -> undefined
       Box (Just w) a d -> undefined
       Chomp d -> undefined
-      Concat (HFill _) d2
-        | beginLine -> handleBox beginLine d2
       Concat d1 d2 -> handleBox False d1 <> handleBox False d2
-
+      _ -> mempty
 
 -- this reverses the list back
 removeTrailingBlankLines :: [Doc] -> [Doc]
@@ -308,50 +304,68 @@ reflowChunks ds = do
       Just l  -> l:ls
       Nothing -> ls
 
-widthOf :: Doc -> Int
+widthOf :: Doc -> Renderer Int
 widthOf d =
   case d of
-    Empty -> 0
-    SoftBreak -> 0
-    LineBreak -> 0
-    HFill n -> n
-    VFill _ -> 0
-    Lit n _ -> n
+    HFill n -> return n
+    Lit n _ -> return n
     Box Nothing _ d -> widthOf d
-    Box (Just w) _ _ -> w
+    Box (Just w) _ _ -> return w
     Chomp d -> widthOf d
-    Concat d1 d2 -> widthOf d1 + widthOf d2
+    Concat d1 d2 -> (+) <$> widthOf d1 <*> widthOf d2
+    PushNesting (IncreaseNesting n) -> do
+      modify $ \st -> st{ stNesting = N.head (stNesting st) + n N.<| stNesting st }
+      return 0
+    PushNesting (SetNesting n) -> do
+      modify $ \st -> st{ stNesting = n N.<| stNesting st }
+      return 0
+    PopNesting -> do
+      modify $ \st -> st{ stNesting =
+                          case N.uncons (stNesting st) of
+                            (_, Just l) -> l
+                            (_, Nothing) -> stNesting st }
+      return 0
+    _ -> return 0
 
 processDoc :: Doc -> Renderer ()
 processDoc d = do
   col <- gets stColumn
   linelen <- ask
-  cur <- gets stCurrent
-  let w = widthOf d
+  mbcur <- gets stCurrent
+  w <- widthOf d
+  nesting <- N.head <$> gets stNesting
+  return $! traceShowId nesting
   case d of
     LineBreak ->
        modify $ \st ->
-         case stCurrent st of
+         case mbcur of
            Nothing -> st
            Just cur ->
              st{ stLines = cur : stLines st
                , stCurrent = Nothing
                , stColumn = 0 }
-    (VFill n) ->  -- TODO track blanks already made
+    VFill n ->  -- TODO track blanks already made
         modify $ \st ->
-           st{ stLines = replicate n mempty ++ maybe id (:) cur (stLines st)
+           st{ stLines = replicate n mempty ++ maybe id (:) mbcur (stLines st)
              , stCurrent = Nothing
              , stColumn = 0 }
-    _ | maybe True (>= col + w) linelen || isNothing cur ->
-        modify $ \st ->
-          st{ stCurrent = Just $ fromMaybe mempty (stCurrent st) <> d
-            , stColumn = col + w
-            }
-      | otherwise ->
-        modify $ \st ->
-          st{ stLines = maybe id (:) (stCurrent st) $ stLines st
-            , stCurrent = Just d
-            , stColumn = w }  -- TODO hfill for nesting
+    _ ->
+      case mbcur of
+        Just cur
+          | maybe False (< col + w) linelen ->  -- doesn't fit
+             modify $ \st ->
+               st{ stLines = cur : stLines st
+                 , stCurrent = Just (HFill nesting <> d)
+                 , stColumn = w }  -- TODO hfill for nesting
+          | otherwise -> -- fits
+             modify $ \st ->
+               st{ stCurrent = Just (cur <> d)
+                 , stColumn = col + w }
+        Nothing ->  -- nothing yet on line
+          modify $ \st ->
+            st{ stLines = stLines st
+              , stCurrent = traceShowId $ Just (HFill nesting <> d)
+              , stColumn = w }  -- TODO hfill for nesting
 
 
 
