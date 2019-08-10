@@ -541,13 +541,13 @@ processDoc d = do
       case mbcur of
         Just cur
           | maybe False (< col + w) linelen -> do -- doesn't fit, create line
-             let d' = case d of
-                        Concat (HFill _) x -> x
-                        _ -> d
+             let (d',w') = case d of
+                             Concat (HFill n) x -> (x, w - n)
+                             _ -> (d, w)
              modify $ \st ->
                st{ stLines = addAlignment cur : stLines st
                  , stCurrent = Just (HFill nesting <> d')
-                 , stColumn = w }
+                 , stColumn = nesting + w' }
           | otherwise -> -- fits
              modify $ \st ->
                st{ stCurrent = Just (cur <> d)
@@ -556,7 +556,7 @@ processDoc d = do
           modify $ \st ->
             st{ stLines = stLines st
               , stCurrent = Just (HFill nesting <> d)
-              , stColumn = w }
+              , stColumn = nesting + w }
     _ -> return ()
 
 isPrintable :: Doc -> Bool
