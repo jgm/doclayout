@@ -247,7 +247,7 @@ chomp d =
     VFill{} -> Empty
     Concat d1 d2 ->
       case chomp d2 of
-        Empty -> chomp d1
+        x | not (isPrintable x) -> chomp d1 <> x
         x -> d1 <> x
     _ -> d
 
