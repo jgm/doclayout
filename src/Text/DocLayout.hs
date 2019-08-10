@@ -39,9 +39,9 @@ module Text.DocLayout (
 --     , offset
 --     , minOffset
 --     , height
---     , lblock
---     , cblock
---     , rblock
+     , lblock
+     , cblock
+     , rblock
      , (<>)
      , (<+>)
      , ($$)
@@ -309,6 +309,20 @@ vsep = foldr ($+$) empty
 -- in the width, it is silently truncated.
 box :: Int -> Doc -> Doc
 box n doc = Box n doc
+
+-- | @lblock n d@ is a block of width @n@ characters, with
+-- text derived from @d@ and aligned to the left. Also chomps
+-- the document for backwards compatibility.
+lblock :: Int -> Doc -> Doc
+lblock w doc = box w (alignLeft $ chomp doc)
+
+-- | Like 'lblock' but aligned to the right.
+rblock :: Int -> Doc -> Doc
+rblock w doc = box w (alignRight $ chomp doc)
+
+-- | Like 'lblock' but aligned centered.
+cblock :: Int -> Doc -> Doc
+cblock w doc = box w (alignCenter $ chomp doc)
 
 -- | Makes a 'Doc' non-reflowable.
 nowrap :: Doc -> Doc
