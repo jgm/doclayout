@@ -107,7 +107,11 @@ data Doc
 
 instance Semigroup Doc where
   -- ensure that the leftmost element is accessible immediately
-  (Concat w x) <> y = Concat w (Concat x y)
+  (Concat w x) <> y = w <> (x <> y)
+  x <> (Concat y z) =
+      case x <> y of
+        Concat{} -> Concat x (Concat y z)
+        w        -> w <> z
   Lit n1 t1 <> Lit n2 t2 = Lit (n1 + n2) (t1 <> t2)
   LineBreak <> LineBreak = LineBreak
   SoftBreak <> SoftBreak = SoftBreak
@@ -343,33 +347,33 @@ reflowChunks ds = do
       Just l  -> l:ls
       Nothing -> ls
 
-widthOf :: Doc -> Renderer Int
+widthOf :: Doc -> Int
 widthOf d =
   case d of
-    HFill n -> return n
-    Lit n _ -> return n
-    Box w _ _ -> return w
-    Concat d1 d2 -> (+) <$> widthOf d1 <*> widthOf d2
-    PushNesting (IncreaseNesting n) -> do
-      modify $ \st -> st{ stNesting = N.head (stNesting st) + n N.<| stNesting st }
-      return 0
-    PushNesting (SetNesting n) -> do
-      modify $ \st -> st{ stNesting = n N.<| stNesting st }
-      return 0
-    PopNesting -> do
-      modify $ \st -> st{ stNesting =
-                          case N.uncons (stNesting st) of
-                            (_, Just l) -> l
-                            (_, Nothing) -> stNesting st }
-      return 0
-    _ -> return 0
+    HFill n -> n
+    Lit n _ -> n
+    Box w _ _ -> w
+    Concat d1 d2 -> widthOf d1 + widthOf d2
+    _ -> 0
 
 processDoc :: Doc -> Renderer ()
 processDoc d = do
   col <- gets stColumn
   linelen <- ask
   mbcur <- gets stCurrent
-  w <- widthOf d
+  let w = widthOf d
+  case d of
+    PushNesting (IncreaseNesting n) ->
+      modify $ \st ->
+          st{ stNesting = N.head (stNesting st) + n N.<| stNesting st }
+    PushNesting (SetNesting n) ->
+      modify $ \st -> st{ stNesting = n N.<| stNesting st }
+    PopNesting ->
+      modify $ \st -> st{ stNesting =
+                          case N.uncons (stNesting st) of
+                            (_, Just l) -> l
+                            (_, Nothing) -> stNesting st }
+    _ -> return ()
   nesting <- N.head <$> gets stNesting
   case d of
     LineBreak ->
