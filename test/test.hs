@@ -40,14 +40,6 @@ tests =
      render (Just 50) (box 3 "aa" <> box 3 "bb" <> box 3 ("aa" <+> "bbbb"))
      @?= ("aa bb aa\n      bbbb" :: Text)
 
- , testCase "nontrivial empty doc" $
-     isEmpty (nest 5 empty)
-     @?= True
-
- , testCase "nontrivial nonempty doc" $
-     isEmpty (box 1 (text "a"))
-     @?= False
-
 -- , testCase "prefixed with multi paragraphs" $
 --     render (Just 80) (prefixed "> " ("foo" <+> "bar" <> cr <>
 --              "baz" <> blankline <> "bim" <+> "bam"))
