@@ -23,7 +23,7 @@ module Text.DocLayout (
 --     , vfill
      , char
      , box
---     , resizableBox
+     , expandableBox
 --     , prefixed
      , flush
      , nest
@@ -70,6 +70,7 @@ where
 import Data.Maybe (fromMaybe, isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
 import qualified Data.List.NonEmpty as N
 import Data.String
 import Data.List (foldl', transpose, intersperse)
@@ -103,7 +104,7 @@ data Doc
   | PopNesting
   | PushAlignment Alignment
   | PopAlignment
-  | Box !Int Doc
+  | Box Bool !Int Doc
   | Concat Doc Doc
   deriving (Show, Eq, Ord)
 
@@ -308,7 +309,12 @@ vsep = foldr ($+$) empty
 -- | A box with the specified width.  If content can't fit
 -- in the width, it is silently truncated.
 box :: Int -> Doc -> Doc
-box n doc = Box n doc
+box n doc = Box False n doc
+
+-- | An expandable box with the specified width.  If content can't fit
+-- in the width, it is silently truncated.
+expandableBox :: Int -> Doc -> Doc
+expandableBox n doc = Box True n doc
 
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left. Also chomps
@@ -401,14 +407,25 @@ handleBoxes = mconcat . map (mkLines False)
     case d of
       HFill n -> [Line n (B.fromText $ T.replicate n " ")]
       Lit n t -> [Line n (B.fromText t)]
-      Box w d' -> (if padRight
-                      then map
-                          (\(Line lw b) ->
-                             if lw < w
-                                then Line w (b <>
-                                      B.fromText (T.replicate (w - lw) " "))
-                                else Line lw b)
-                      else id) $ snd $ toLines (Just w) d'
+      Box expandable w d'
+              -> let (dimensions, ls) = toLines (Just w) d'
+                     trunc w' (Line _ b) = Line w'
+                       (B.fromLazyText $ TL.take (fromIntegral w') $
+                            B.toLazyText b)
+                     expand w' (Line _ b) = Line w' b
+                     adjust = case docWidth dimensions of
+                                w' | w' <= w    -> id
+                                w' | expandable -> map (expand w')
+                                _               -> map (trunc w)
+                     pad = if padRight
+                              then map
+                                   (\(Line lw b) ->
+                                       if lw < w
+                                          then Line w (b <>
+                                            B.fromText (T.replicate (w - lw) " "))
+                                          else Line lw b)
+                              else id
+                 in pad $ adjust ls
       Concat d1 d2 -> combineLines padRight 0 0
                          (mkLines True d1) (mkLines False d2)
       _ -> [Line 0 mempty]
@@ -480,7 +497,7 @@ widthOf d =
   case d of
     HFill n -> n
     Lit n _ -> n
-    Box w _ -> w
+    Box _ w _ -> w
     Concat d1 d2 -> widthOf d1 + widthOf d2
     _ -> 0
 
