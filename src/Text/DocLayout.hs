@@ -29,9 +29,9 @@ module Text.DocLayout (
      , nest
      , hang
 --     , aligned
---     , alignLeft
---     , alignRight
---     , alignCenter
+     , alignLeft
+     , alignRight
+     , alignCenter
 --     , nowrap
 --     , withColumn
 --     , withLineLength
@@ -251,6 +251,22 @@ chomp d =
         x -> d1 <> x
     _ -> d
 
+-- | Align left.
+alignLeft :: Doc -> Doc
+alignLeft doc =
+  PushAlignment AlLeft <> cr <> doc <> cr <> PopAlignment
+
+-- | Align right.
+alignRight :: Doc -> Doc
+alignRight doc =
+  PushAlignment AlRight <> cr <> doc <> cr <> PopAlignment
+
+-- | Align right.
+alignCenter :: Doc -> Doc
+alignCenter doc =
+  PushAlignment AlCenter <> cr <> doc <> cr <> PopAlignment
+
+
 --
 -- Code for dividing Doc into Lines (internal)
 --
@@ -265,6 +281,7 @@ toLines linelen doc = (dimensions, ls)
      , stLines  = []
      , stCurrent = Nothing
      , stNesting = N.fromList [0]
+     , stAlignment = N.fromList [AlLeft]
      }
 
 data RenderState =
@@ -273,6 +290,7 @@ data RenderState =
   , stLines       :: [Doc]
   , stCurrent     :: Maybe Doc
   , stNesting     :: N.NonEmpty Int
+  , stAlignment   :: N.NonEmpty Alignment
   } deriving (Show)
 
 type Renderer = RWS (Maybe Int) Dimensions RenderState
@@ -353,6 +371,13 @@ processDoc d = do
   mbcur <- gets stCurrent
   let w = widthOf d
   case d of
+    PushAlignment al ->
+      modify $ \st -> st{ stAlignment = al N.<| stAlignment st }
+    PopAlignment ->
+      modify $ \st -> st{ stAlignment =
+                          case N.uncons (stAlignment st) of
+                            (_, Just l)  -> l
+                            (_, Nothing) -> stAlignment st }
     PushNesting (IncreaseNesting n) ->
       modify $ \st ->
           st{ stNesting = N.head (stNesting st) + n N.<| stNesting st }
@@ -365,18 +390,29 @@ processDoc d = do
                             (_, Nothing) -> stNesting st }
     _ -> return ()
   nesting <- N.head <$> gets stNesting
+  alignment <- N.head <$> gets stAlignment
+  let addAlignment doc =
+        case linelen of
+          Nothing  -> doc
+          Just ll  ->
+            case alignment of
+              AlLeft   -> doc
+              AlCenter -> HFill ((ll - widthOf doc) `div` 2) <> doc
+              AlRight  -> HFill (ll - widthOf doc) <> doc
   case d of
     LineBreak ->
        modify $ \st ->
          case mbcur of
            Nothing -> st
            Just cur ->
-             st{ stLines = cur : stLines st
+             st{ stLines = addAlignment cur : stLines st
                , stCurrent = Nothing
                , stColumn = 0 }
-    VFill n ->  -- TODO track blanks already made
+    VFill n ->
         modify $ \st ->
-           st{ stLines = replicate n mempty ++ maybe id (:) mbcur (stLines st)
+           st{ stLines = replicate n mempty ++
+                         maybe id ((:) . addAlignment)
+                           mbcur (stLines st)
              , stCurrent = Nothing
              , stColumn = 0 }
     _ ->
@@ -387,9 +423,9 @@ processDoc d = do
                         Concat (HFill _) x -> x
                         _ -> d
              modify $ \st ->
-               st{ stLines = cur : stLines st
+               st{ stLines = addAlignment cur : stLines st
                  , stCurrent = Just (HFill nesting <> d')
-                 , stColumn = w }  -- TODO hfill for nesting
+                 , stColumn = w }
           | otherwise -> -- fits
              modify $ \st ->
                st{ stCurrent = Just (cur <> d)
@@ -399,10 +435,6 @@ processDoc d = do
             st{ stLines = stLines st
               , stCurrent = Just (HFill nesting <> d)
               , stColumn = w }  -- TODO hfill for nesting
-
-
-
-
 
 
 
