@@ -403,7 +403,7 @@ handleBoxes = mconcat . map (mkLines False)
   where
   mkLines padRight d =
     case d of
-      HFill n -> [Line 0 mempty] -- ignore final hfill
+      HFill _ -> [Line 0 mempty] -- ignore final hfill
       Lit n t -> [Line n (B.fromText t)]
       Box expandable w d'
               -> let (dimensions, ls) = toLines (Just w) d'
