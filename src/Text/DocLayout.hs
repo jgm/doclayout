@@ -54,7 +54,7 @@ module Text.DocLayout (
 --     , vcat
 --     , vsep
 --     , nestle
---     , chomp
+     , chomp
 --     , inside
 --     , braces
 --     , brackets
@@ -230,6 +230,23 @@ infixr 6 <+>
 hsep :: [Doc] -> Doc
 hsep = foldr (<+>) mempty
 
+-- | Chomps trailing blank space off of a 'Doc'.
+chomp :: Doc -> Doc
+chomp d =
+  case d of
+    Empty -> Empty
+    SoftBreak -> Empty
+    LineBreak -> Empty
+    HFill{} -> Empty
+    VFill{} -> Empty
+    Lit{}   -> d
+    PushNesting{} -> d
+    PopNesting{} -> d
+    Box{} -> d
+    Concat d1 d2 ->
+      case chomp d2 of
+        Empty -> chomp d1
+        x -> d1 <> x
 
 --
 -- Code for dividing Doc into Lines (internal)
@@ -268,7 +285,7 @@ handleBoxes = map handleBox
     case d of
       HFill n -> Line n (B.fromText $ T.replicate n " ")
       Lit n t -> Line n (B.fromText t)
-      Box w a d -> undefined
+      Box _ _ _ -> undefined
       Concat d1 d2 -> handleBox d1 <> handleBox d2
       _ -> mempty
 
@@ -855,21 +872,6 @@ alignRight doc =
 alignCenter :: Doc -> Doc
 alignCenter doc =
   single (PushAlignment AlCenter) <> doc <> cr <> single PopAlignment
-
--- | Chomps trailing blank space off of a 'Doc'.
-chomp :: Doc -> Doc
-chomp (Doc ds) = Doc $ go ds
-  where
-    go ds' =
-      case Seq.viewr ds' of
-        rest Seq.:> SoftSpace{}     -> go rest
-        rest Seq.:> Blanks{}        -> go rest
-        rest Seq.:> Newline         -> go rest
-        rest Seq.:> PopNesting      -> go rest Seq.|> PopNesting
-        rest Seq.:> PushNesting f   -> go rest Seq.|> PushNesting f
-        rest Seq.:> PopAlignment    -> go rest Seq.|> PopAlignment
-        rest Seq.:> PushAlignment a -> go rest Seq.|> PushAlignment a
-        _                           -> ds'
 
 -- | Removes leading blank lines from a 'Doc'.
 nestle :: Doc -> Doc
