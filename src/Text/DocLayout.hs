@@ -77,6 +77,7 @@ import Control.Monad.RWS.Strict
 import qualified Data.Text.Lazy.Builder as B
 import Data.Text.Lazy.Builder (Builder)
 import Data.String.Conversions (ConvertibleStrings(..), LazyText)
+import Safe (maximumDef)
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup (Semigroup)
@@ -382,6 +383,7 @@ toLines linelen doc = (dimensions, ls)
      , stCurrent = Nothing
      , stNesting = N.fromList [0]
      , stAlignment = N.fromList [AlLeft]
+     , stMaxWidth = 0
      }
 
 data RenderState =
@@ -391,21 +393,25 @@ data RenderState =
   , stCurrent     :: Maybe Doc
   , stNesting     :: N.NonEmpty Int
   , stAlignment   :: N.NonEmpty Alignment
+  , stMaxWidth    :: !Int
   } deriving (Show)
 
 type Renderer = RWS (Maybe Int) Dimensions RenderState
 
 extractLines :: Doc -> Renderer [Line]
-extractLines = fmap handleBoxes . reflowChunks . splitIntoChunks
+extractLines = reflowChunks . splitIntoChunks >=> handleBoxes
 
-handleBoxes :: [Doc] -> [Line]
-handleBoxes = mconcat . map (mkLines False)
+handleBoxes :: [Doc] -> Renderer [Line]
+handleBoxes ds = mconcat <$> mapM (mkLines False >=> adjustDimensions) ds
   where
+  adjustDimensions ls = do
+    tell $ Dimensions (maximumDef 0 $ map lineWidth ls) (length ls)
+    return ls
   mkLines padRight d =
     case d of
-      HFill n | padRight  -> [padLine n]
-              | otherwise -> [Line 0 mempty] -- ignore final hfill
-      Lit n t -> [Line n (B.fromText t)]
+      HFill n | padRight  -> return [padLine n]
+              | otherwise -> return [Line 0 mempty] -- ignore final hfill
+      Lit n t -> return [Line n (B.fromText t)]
       Box expandable w d'
               -> let (dimensions, ls) = toLines (Just w) d'
                      trunc w' (Line _ b) = Line w'
@@ -416,12 +422,12 @@ handleBoxes = mconcat . map (mkLines False)
                                 w' | w' <= w    -> id
                                 w' | expandable -> map (expand w')
                                 _               -> map (trunc w)
-                 in adjust ls
-      Concat d1 d2 ->
-          let d2lines = mkLines False d2
-           in combineLines (widthOf d1) (widthOf d2)
-                  (mkLines (not (null d2lines)) d1) (mkLines False d2)
-      _ -> [Line 0 mempty]
+                 in return $ adjust ls
+      Concat d1 d2 -> do
+          d2lines <- mkLines False d2
+          d1lines <- mkLines (not (null d2lines)) d1
+          return $ combineLines (widthOf d1) (widthOf d2) d1lines d2lines
+      _ -> return [Line 0 mempty]
 
 -- Combine two lists of lines, adding blank filler if needed.
 combineLines :: Int -> Int -> [Line] -> [Line] -> [Line]

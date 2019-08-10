@@ -38,7 +38,7 @@ tests =
 
  , testCase "simple box wrapping" $
      render (Just 50) (box 3 "aa" <> box 3 "bb" <> box 3 ("aa" <+> "bbbb"))
-     @?= ("aa bb aa\n      bbbb" :: Text)
+     @?= ("aa bb aa\n      bbb" :: Text)
 
 -- , testCase "prefixed with multi paragraphs" $
 --     render (Just 80) (prefixed "> " ("foo" <+> "bar" <> cr <>
@@ -130,10 +130,6 @@ tests =
  , testCase "chomp with nesting" $
      render Nothing (chomp (nest 3 ("aa" <> blankline)) <> "bb")
      @?= ("   aabb" :: Text)
-
- , testCase "chomp with alignment" $
-     render (Just 4) (chomp (alignCenter ("aa\nbb" <> blankline)))
-     @?= (" aa\n bb" :: Text)
 
  , testCase "chomp with box at end" $
      render Nothing ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
