@@ -109,7 +109,7 @@ data Doc
 instance Semigroup Doc where
   -- ensure that the leftmost element is accessible immediately
   (Concat w x) <> y = Concat w (Concat x y)
-  -- Lit n1 t1 <> Lit n2 t2 = Lit (n1 + n2) (t1 <> t2)
+  Lit n1 t1 <> Lit n2 t2 = Lit (n1 + n2) (t1 <> t2)
   LineBreak <> LineBreak = LineBreak
   SoftBreak <> SoftBreak = SoftBreak
   LineBreak <> SoftBreak = LineBreak
