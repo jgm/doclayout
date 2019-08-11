@@ -572,7 +572,7 @@ processDoc d = do
                , stColumn = 0 }
     VFill n ->
         modify $ \st ->
-           st{ stLines = replicate n nesting ++
+           st{ stLines = replicate n (chomp nesting) ++
                          maybe id ((:) . addAlignment)
                            mbcur (stLines st)
              , stCurrent = Nothing
