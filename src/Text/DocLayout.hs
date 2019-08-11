@@ -417,6 +417,7 @@ toLines linelen doc = (dimensions, ls)
    startingState = RenderState
      { stColumn = 0
      , stLines  = []
+     , stChunk = mempty
      , stCurrent = Nothing
      , stNesting = N.fromList [mempty]
      , stAlignment = N.fromList [AlLeft]
@@ -427,6 +428,7 @@ data RenderState =
   RenderState
   { stColumn      :: !Int
   , stLines       :: [Doc]
+  , stChunk       :: Doc
   , stCurrent     :: Maybe Doc
   , stNesting     :: N.NonEmpty Doc
   , stAlignment   :: N.NonEmpty Alignment
@@ -436,7 +438,7 @@ data RenderState =
 type Renderer = RWS (Maybe Int) Dimensions RenderState
 
 extractLines :: Doc -> Renderer [Line]
-extractLines = reflowChunks . splitIntoChunks >=> handleBoxes
+extractLines = reflowChunks . unfoldDoc >=> handleBoxes
 
 handleBoxes :: [Doc] -> Renderer [Line]
 handleBoxes ds =
@@ -491,39 +493,28 @@ combineLines xw yw (x:xs) (y:ys) =
 padLine :: Int -> Line
 padLine n = Line n $ B.fromText (T.replicate n " ")
 
--- note, reversed lines...
-splitIntoChunks :: Doc -> [Doc]
-splitIntoChunks doc = reverse $
-  case getChunk doc Nothing [] of
-    (Nothing, ds) -> ds
-    (Just d, ds)  -> d:ds
-
-getChunk :: Doc -> Maybe Doc -> [Doc] -> (Maybe Doc, [Doc])
-getChunk doc mbaccum ds =
-  let ds' = maybe id (:) mbaccum $ ds
-  in case doc of
-    Empty -> (Nothing, ds')
-    SoftBreak -> (Nothing, ds')
-    LineBreak -> (Nothing, doc:ds')
-    VFill{} -> (Nothing, doc:ds')
-    PushPrefix{} -> (Nothing, doc:ds')
-    PopPrefix{} -> (Nothing, doc:ds')
-    PushAlignment{} -> (Nothing, doc:ds')
-    PopAlignment{} -> (Nothing, doc:ds')
-    Concat d1 d2 ->
-      case getChunk d1 mbaccum ds of
-        (mbdoc', ds'') -> getChunk d2 mbdoc' ds''
-    _ -> (Just (maybe id (<>) mbaccum $ doc), ds)
+unfoldDoc :: Doc -> [Doc]
+unfoldDoc (Concat x y) =
+  x : unfoldDoc y
+unfoldDoc x = [x]
 
 reflowChunks :: [Doc] -> Renderer [Doc]
 reflowChunks ds = do
   mapM processDoc ds
-  current <- gets stCurrent
-  ls <- gets stLines
-  return $ dropWhile isBlank $ reverse $ dropWhile isEmpty $
-    case current of
-      Just l  -> l:ls
-      Nothing -> ls
+  flushCurrent
+  dropWhile isBlank . reverse . dropWhile isBlank <$> gets stLines
+
+flushCurrent :: Renderer ()
+flushCurrent = do
+  linelen <- ask
+  alignment <- N.head <$> gets stAlignment
+  flushChunk
+  modify $ \st ->
+    st{ stLines =
+          maybe id ((:) . addAlignment linelen alignment) (stCurrent st)
+          (stLines st)
+      , stCurrent = Nothing
+      , stColumn = 0 }
 
 isBlank :: Doc -> Bool
 isBlank Empty           = True
@@ -548,85 +539,79 @@ widthOf d =
     Concat d1 d2 -> widthOf d1 + widthOf d2
     _            -> 0
 
+addAlignment :: Maybe Int -> Alignment -> Doc -> Doc
+addAlignment linelen alignment doc =
+  case linelen of
+    Nothing  -> doc
+    Just ll  ->
+      case alignment of
+        AlLeft   -> doc
+        AlCenter -> HFill ((ll - widthOf doc) `div` 2) <> doc
+        AlRight  -> HFill (ll - widthOf doc) <> doc
+
 processDoc :: Doc -> Renderer ()
 processDoc d = do
+  col <- gets stColumn
+  nesting <- N.head <$> gets stNesting
+  case d of
+    Empty -> flushChunk
+    PushAlignment al -> modify $ \st ->
+          st{ stAlignment = al N.<| stAlignment st }
+    PopAlignment -> modify $ \st ->
+          st{ stAlignment =
+                case N.uncons (stAlignment st) of
+                  (_, Just l)  -> l
+                  (_, Nothing) -> stAlignment st }
+    PushPrefix (AddPrefix nd) -> modify $ \st ->
+          st{ stNesting = N.head (stNesting st) <> nd N.<| stNesting st }
+    PushPrefix (SetPrefix nd) -> modify $ \st ->
+          st{ stNesting = nd N.<| stNesting st }
+    PushPrefix NestToColumn -> modify $ \st ->
+          st{ stNesting =
+               let nesting' = N.head (stNesting st)
+                   nw = widthOf nesting'
+               in  nesting' <> HFill (col - nw) N.<| stNesting st }
+    PopPrefix -> modify $ \st ->
+                   st{ stNesting = case N.uncons (stNesting st) of
+                                     (_, Just l) -> l
+                                     (_, Nothing) -> stNesting st }
+    LineBreak -> flushCurrent
+    SoftBreak -> flushChunk
+    VFill n -> do
+        flushCurrent
+        modify $ \st ->
+           st{ stLines = replicate n (chomp nesting) ++ stLines st }
+    _ -> modify $ \st -> st{ stChunk = stChunk st <> d }
+
+flushChunk :: Renderer ()
+flushChunk = do
   col <- gets stColumn
   linelen <- ask
   mbcur <- gets stCurrent
   nesting <- N.head <$> gets stNesting
   alignment <- N.head <$> gets stAlignment
-  let addAlignment doc =
-        case linelen of
-          Nothing  -> doc
-          Just ll  ->
-            case alignment of
-              AlLeft   -> doc
-              AlCenter -> HFill ((ll - widthOf doc) `div` 2) <> doc
-              AlRight  -> HFill (ll - widthOf doc) <> doc
-  case d of
-    PushAlignment al ->
-      modify $ \st -> st{ stAlignment = al N.<| stAlignment st }
-    PopAlignment ->
-      modify $ \st -> st{ stAlignment =
-                          case N.uncons (stAlignment st) of
-                            (_, Just l)  -> l
-                            (_, Nothing) -> stAlignment st }
-    PushPrefix (AddPrefix nd) ->
+  d <- gets stChunk
+  modify $ \st -> st { stChunk = mempty }
+  let w = widthOf d
+  case mbcur of
+    Just cur
+      | maybe False (< col + w) linelen -> do -- doesn't fit, create line
+         let (d',w') = case d of
+                         Concat (HFill n) x -> (x, w - n)
+                         _ -> (d, w)
+         modify $ \st ->
+           st{ stLines = addAlignment linelen alignment cur : stLines st
+             , stCurrent = Just (nesting <> d')
+             , stColumn = widthOf nesting + w' }
+      | otherwise -> -- fits
+         modify $ \st ->
+           st{ stCurrent = Just (cur <> d)
+             , stColumn = col + w }
+    Nothing ->  -- nothing yet on line
       modify $ \st ->
-          st{ stNesting = N.head (stNesting st) <> nd N.<| stNesting st }
-    PushPrefix (SetPrefix nd) ->
-      modify $ \st -> st{ stNesting = nd N.<| stNesting st }
-    PushPrefix NestToColumn ->
-      modify $ \st -> st{ stNesting =
-          let nesting' = N.head (stNesting st)
-              nw = widthOf nesting'
-          in  nesting' <> HFill (col - nw) N.<| stNesting st }
-    PopPrefix ->
-      modify $ \st -> st{ stNesting =
-                          case N.uncons (stNesting st) of
-                            (_, Just l) -> l
-                            (_, Nothing) -> stNesting st }
-    HFill n -> -- HFill by itself is probabyl before a PushNesting
-       modify $ \st ->
-         st{ stCurrent = Just $ maybe d (<> d) $ stCurrent st
-           , stColumn = col + n }
-    LineBreak ->
-       modify $ \st ->
-         case mbcur of
-           Nothing -> st
-           Just cur ->
-             st{ stLines = addAlignment cur : stLines st
-               , stCurrent = Nothing
-               , stColumn = 0 }
-    VFill n ->
-        modify $ \st ->
-           st{ stLines = replicate n (chomp nesting) ++
-                         maybe id ((:) . addAlignment)
-                           mbcur (stLines st)
-             , stCurrent = Nothing
-             , stColumn = 0 }
-    _ | isPrintable d -> do
-      let w = widthOf d
-      case mbcur of
-        Just cur
-          | maybe False (< col + w) linelen -> do -- doesn't fit, create line
-             let (d',w') = case d of
-                             Concat (HFill n) x -> (x, w - n)
-                             _ -> (d, w)
-             modify $ \st ->
-               st{ stLines = addAlignment cur : stLines st
-                 , stCurrent = Just (nesting <> d')
-                 , stColumn = widthOf nesting + w' }
-          | otherwise -> -- fits
-             modify $ \st ->
-               st{ stCurrent = Just (cur <> d)
-                 , stColumn = col + w }
-        Nothing ->  -- nothing yet on line
-          modify $ \st ->
-            st{ stLines = stLines st
-              , stCurrent = Just (nesting <> d)
-              , stColumn = widthOf nesting + w }
-    _ -> return ()
+        st{ stLines = stLines st
+          , stCurrent = Just (nesting <> d)
+          , stColumn = widthOf nesting + w }
 
 isPrintable :: Doc -> Bool
 isPrintable (Lit n _) = n > 0
