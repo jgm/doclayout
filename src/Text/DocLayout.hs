@@ -36,9 +36,9 @@ module Text.DocLayout (
 --     , withColumn
 --     , withLineLength
 --     , afterBreak
---     , offset
---     , minOffset
---     , height
+     , offset
+     , minOffset
+     , height
      , lblock
      , cblock
      , rblock
@@ -169,6 +169,18 @@ instance Monoid Dimensions where
 -- | Returns (width, height) of Doc.
 getDimensions :: Maybe Int -> Doc -> Dimensions
 getDimensions linelen = fst . toLines linelen
+
+-- | Minimum height of Doc.
+height :: Doc -> Int
+height = docHeight . getDimensions Nothing
+
+-- | Non-wrapped width of Doc.
+offset :: Doc -> Int
+offset = docWidth . getDimensions Nothing
+
+-- | Returns the minimal width of a 'Doc' when reflowed at breakable spaces.
+minOffset :: Doc -> Int
+minOffset = docWidth . getDimensions (Just 1)
 
 --
 -- Constructors for Doc
@@ -381,7 +393,7 @@ toLines linelen doc = (dimensions, ls)
      { stColumn = 0
      , stLines  = []
      , stCurrent = Nothing
-     , stNesting = N.fromList [0]
+     , stNesting = N.fromList [mempty]
      , stAlignment = N.fromList [AlLeft]
      , stMaxWidth = 0
      }
@@ -391,7 +403,7 @@ data RenderState =
   { stColumn      :: !Int
   , stLines       :: [Doc]
   , stCurrent     :: Maybe Doc
-  , stNesting     :: N.NonEmpty Int
+  , stNesting     :: N.NonEmpty Doc
   , stAlignment   :: N.NonEmpty Alignment
   , stMaxWidth    :: !Int
   } deriving (Show)
@@ -516,9 +528,9 @@ processDoc d = do
                             (_, Nothing) -> stAlignment st }
     PushNesting (IncreaseNesting n) ->
       modify $ \st ->
-          st{ stNesting = N.head (stNesting st) + n N.<| stNesting st }
+          st{ stNesting = N.head (stNesting st) <> HFill n N.<| stNesting st }
     PushNesting (SetNesting n) ->
-      modify $ \st -> st{ stNesting = n N.<| stNesting st }
+      modify $ \st -> st{ stNesting = HFill n N.<| stNesting st }
     PopNesting ->
       modify $ \st -> st{ stNesting =
                           case N.uncons (stNesting st) of
@@ -549,8 +561,8 @@ processDoc d = do
                              _ -> (d, w)
              modify $ \st ->
                st{ stLines = addAlignment cur : stLines st
-                 , stCurrent = Just (HFill nesting <> d')
-                 , stColumn = nesting + w' }
+                 , stCurrent = Just (nesting <> d')
+                 , stColumn = widthOf nesting + w' }
           | otherwise -> -- fits
              modify $ \st ->
                st{ stCurrent = Just (cur <> d)
@@ -558,8 +570,8 @@ processDoc d = do
         Nothing ->  -- nothing yet on line
           modify $ \st ->
             st{ stLines = stLines st
-              , stCurrent = Just (HFill nesting <> d)
-              , stColumn = nesting + w }
+              , stCurrent = Just (nesting <> d)
+              , stColumn = widthOf nesting + w }
     _ -> return ()
 
 isPrintable :: Doc -> Bool
