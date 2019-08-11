@@ -11,7 +11,7 @@ module Text.DocLayout (
        Doc(..)
      , Dimensions(..)
      , Alignment(..)
-     , NestingChange(..)
+     , PrefixChange(..)
      , render
      , getDimensions
      , cr
@@ -88,9 +88,9 @@ import Debug.Trace
 data Alignment = AlLeft | AlRight | AlCenter
   deriving (Show, Eq, Ord)
 
-data NestingChange =
-    AddNesting Doc
-  | SetNesting Doc
+data PrefixChange =
+    AddPrefix Doc
+  | SetPrefix Doc
   deriving (Show, Eq, Ord)
 
 data Doc
@@ -100,8 +100,8 @@ data Doc
   | HFill !Int
   | VFill !Int
   | Lit !Int !Text
-  | PushNesting NestingChange
-  | PopNesting
+  | PushPrefix PrefixChange
+  | PopPrefix
   | PushAlignment Alignment
   | PopAlignment
   | Box Bool !Int Doc
@@ -220,11 +220,11 @@ blanklines n = VFill n
 
 -- | Makes a 'Doc' flush against the left margin.
 flush :: Doc -> Doc
-flush doc = PushNesting (SetNesting mempty) <> doc <> PopNesting
+flush doc = PushPrefix (SetPrefix mempty) <> doc <> PopPrefix
 
 -- | Indents a 'Doc' by the specified number of spaces.
 nest :: Int -> Doc -> Doc
-nest ind doc = PushNesting (AddNesting (HFill ind)) <> doc <> PopNesting
+nest ind doc = PushPrefix (AddPrefix (HFill ind)) <> doc <> PopPrefix
 
 -- | A hanging indent. @hang ind start doc@ prints @start@,
 -- then @doc@, leaving an indent of @ind@ spaces on every
@@ -475,8 +475,8 @@ getChunk doc mbaccum ds =
     SoftBreak -> (Nothing, ds')
     LineBreak -> (Nothing, doc:ds')
     VFill{} -> (Nothing, doc:ds')
-    PushNesting{} -> (Nothing, doc:ds')
-    PopNesting{} -> (Nothing, doc:ds')
+    PushPrefix{} -> (Nothing, doc:ds')
+    PopPrefix{} -> (Nothing, doc:ds')
     PushAlignment{} -> (Nothing, doc:ds')
     PopAlignment{} -> (Nothing, doc:ds')
     Concat d1 d2 ->
@@ -526,12 +526,12 @@ processDoc d = do
                           case N.uncons (stAlignment st) of
                             (_, Just l)  -> l
                             (_, Nothing) -> stAlignment st }
-    PushNesting (AddNesting nd) ->
+    PushPrefix (AddPrefix nd) ->
       modify $ \st ->
           st{ stNesting = N.head (stNesting st) <> nd N.<| stNesting st }
-    PushNesting (SetNesting nd) ->
+    PushPrefix (SetPrefix nd) ->
       modify $ \st -> st{ stNesting = nd N.<| stNesting st }
-    PopNesting ->
+    PopPrefix ->
       modify $ \st -> st{ stNesting =
                           case N.uncons (stNesting st) of
                             (_, Just l) -> l
