@@ -258,7 +258,10 @@ hcat = mconcat
 -- | Concatenate two 'Doc's, putting breakable space between them.
 infixr 6 <+>
 (<+>) :: Doc -> Doc -> Doc
-(<+>) x y = x <> space <> y
+(<+>) x y
+  | isEmpty x = y
+  | isEmpty y = x
+  | otherwise = x <> space <> y
 
 -- | Same as 'cat', but putting breakable spaces between the 'Doc's.
 hsep :: [Doc] -> Doc
@@ -327,7 +330,10 @@ infixr 5 $$
 infixr 5 $+$
 -- | @a $+$ b@ puts @a@ above @b@, with a blank line between.
 ($+$) :: Doc -> Doc -> Doc
-($+$) x y = x <> blankline <> y
+($+$) x y
+  | isEmpty x = y
+  | isEmpty y = x
+  | otherwise = x <> blankline <> y
 
 -- | List version of '$$'.
 vcat :: [Doc] -> Doc
