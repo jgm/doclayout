@@ -159,4 +159,10 @@ tests =
  , testCase "aligned wrapped text" $
     render Nothing (cblock 7 ("hi" <+> "there"))
     @?= ("  hi\n there" :: Text)
+
+  , testCase "afterBreak" $
+      render (Just 2) ("hi" <+> afterBreak "!" <> afterBreak "?" <>
+          "x" <> afterBreak "?")
+    @?= ("hi\n!x" :: Text)
+
   ]

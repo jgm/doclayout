@@ -34,7 +34,7 @@ module Text.DocLayout (
      , nowrap
 --     , withColumn
 --     , withLineLength
---     , afterBreak
+     , afterBreak
      , offset
      , minOffset
      , height
@@ -105,6 +105,7 @@ data Doc
   | PushAlignment Alignment
   | PopAlignment
   | Box Bool !Int Doc
+  | AfterBreak Doc
   | Concat Doc Doc
   deriving (Show, Eq, Ord)
 
@@ -312,6 +313,10 @@ isEmpty :: Doc -> Bool
 isEmpty Empty = True
 isEmpty _     = False
 
+-- | Content to print only if it comes at the beginning of a line,
+-- to be used e.g. for escaping line-initial `.` in roff man.
+afterBreak :: Doc -> Doc
+afterBreak d = AfterBreak d
 
 infixr 5 $$
 -- | @a $$ b@ puts @a@ above @b@.
@@ -427,15 +432,21 @@ extractLines :: Doc -> Renderer [Line]
 extractLines = reflowChunks . splitIntoChunks >=> handleBoxes
 
 handleBoxes :: [Doc] -> Renderer [Line]
-handleBoxes ds = mconcat <$> mapM (mkLines False >=> adjustDimensions) ds
-  where
+handleBoxes ds =
+  mconcat <$> mapM
+    (mkLines False . resolveAfterBreak >=> adjustDimensions) ds
+ where
   adjustDimensions ls = do
     tell $ Dimensions (maximumDef 0 $ map lineWidth ls) (length ls)
     return ls
+  resolveAfterBreak (AfterBreak d) = d
+  resolveAfterBreak (Concat (AfterBreak d) y) = Concat d y
+  resolveAfterBreak d = d
   mkLines padRight d =
     case d of
       HFill n | padRight  -> return [padLine n]
               | otherwise -> return [Line 0 mempty] -- ignore final hfill
+      AfterBreak{} -> return []
       Lit n t -> return [Line n (B.fromText t)]
       Box expandable w d'
               -> let (dimensions, ls) = toLines (Just w) d'
@@ -523,11 +534,12 @@ isBlank _               = False
 widthOf :: Doc -> Int
 widthOf d =
   case d of
-    HFill n -> n
-    Lit n _ -> n
-    Box _ w _ -> w
+    HFill n      -> n
+    Lit n _      -> n
+    Box _ w _    -> w
+    AfterBreak _ -> 0
     Concat d1 d2 -> widthOf d1 + widthOf d2
-    _ -> 0
+    _            -> 0
 
 processDoc :: Doc -> Renderer ()
 processDoc d = do
@@ -603,6 +615,7 @@ processDoc d = do
 isPrintable :: Doc -> Bool
 isPrintable (Lit n _) = n > 0
 isPrintable Box{} = True
+isPrintable AfterBreak{} = True
 isPrintable (Concat x y) = isPrintable x || isPrintable y
 isPrintable _ = False
 
