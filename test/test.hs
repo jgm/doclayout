@@ -169,4 +169,7 @@ tests =
       render (Just 5) ("[" <> nest 1 ("aaaaaaaaa" $$ "bbbbbbb") <> "]")
       @?= ("[aaaaaaaaa\n bbbbbbb]" :: Text)
 
+  , testCase "empty nest" $
+      render Nothing ("aa" $$ nest 3 mempty $$ "bb")
+      @?= ("aa\nbb" :: Text)
   ]
