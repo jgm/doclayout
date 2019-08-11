@@ -20,11 +20,10 @@ module Text.DocLayout (
      , space
      , text
      , lit
---     , vfill
      , char
      , box
      , expandableBox
---     , prefixed
+     , prefixed
      , flush
      , nest
      , hang
@@ -231,6 +230,19 @@ nest ind doc = PushPrefix (AddPrefix (HFill ind)) <> doc <> PopPrefix
 -- line but the first.
 hang :: Int -> Doc -> Doc -> Doc
 hang ind start doc = start <> nest ind doc
+
+-- | Add a prefix which will repeat at the beginning of
+-- every line of the Doc.  Trailing spaces will be suppressed
+-- when followed only by whitespace.
+prefixed :: String -> Doc -> Doc
+prefixed pref doc =
+  PushPrefix (AddPrefix prefdoc) <> doc <> PopPrefix
+ where
+  prefdoc = Lit (length bs) (T.pack $ reverse bs) <>
+            case length as of
+              0 -> mempty
+              n -> HFill n
+  (as, bs) = span (==' ') $ reverse pref
 
 -- | Concatenate a list of 'Doc's.
 cat :: [Doc] -> Doc
@@ -489,10 +501,23 @@ reflowChunks ds = do
   mapM processDoc ds
   current <- gets stCurrent
   ls <- gets stLines
-  return $ dropWhile isEmpty $ reverse $ dropWhile isEmpty $
+  return $ dropWhile isBlank $ reverse $ dropWhile isEmpty $
     case current of
       Just l  -> l:ls
       Nothing -> ls
+
+isBlank :: Doc -> Bool
+isBlank Empty           = True
+isBlank HFill{}         = True
+isBlank LineBreak       = True
+isBlank SoftBreak       = True
+isBlank VFill{}         = True
+isBlank PushPrefix{}    = True
+isBlank PopPrefix       = True
+isBlank PushAlignment{} = True
+isBlank PopAlignment    = True
+isBlank (Concat d1 d2)  = isBlank d1 && isBlank d2
+isBlank _               = False
 
 widthOf :: Doc -> Int
 widthOf d =
@@ -546,7 +571,7 @@ processDoc d = do
                , stColumn = 0 }
     VFill n ->
         modify $ \st ->
-           st{ stLines = replicate n mempty ++
+           st{ stLines = replicate n nesting ++
                          maybe id ((:) . addAlignment)
                            mbcur (stLines st)
              , stCurrent = Nothing

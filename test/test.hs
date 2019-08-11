@@ -40,14 +40,14 @@ tests =
      render (Just 50) (box 3 "aa" <> box 3 "bb" <> box 3 ("aa" <+> "bbbb"))
      @?= ("aa bb aa\n      bbb" :: Text)
 
--- , testCase "prefixed with multi paragraphs" $
---     render (Just 80) (prefixed "> " ("foo" <+> "bar" <> cr <>
---              "baz" <> blankline <> "bim" <+> "bam"))
---     @?= ("> foo bar\n> baz\n>\n> bim bam" :: String)
---
--- , testCase "prefixed with hsep" $
---     render Nothing (prefixed "> " $ hsep ["a","b","c"])
---     @?= ("> a b c" :: Text)
+ , testCase "prefixed with multi paragraphs" $
+     render (Just 80) (prefixed "> " ("foo" <+> "bar" <> cr <>
+              "baz" <> blankline <> "bim" <+> "bam"))
+     @?= ("> foo bar\n> baz\n>\n> bim bam" :: String)
+
+ , testCase "prefixed with hsep" $
+     render Nothing (prefixed "> " $ hsep ["a","b","c"])
+     @?= ("> a b c" :: Text)
 
  , testCase "breaking space before empty box" $
      render Nothing ("a" <> space <> box 3 mempty)
@@ -56,11 +56,6 @@ tests =
  , testCase "centered" $
      render (Just 10) (alignCenter "hi\nlow")
      @?= ("    hi\n   low" :: String)
-
--- , testCase "vfill" $
---     render Nothing (vfill "|" <> box 2 (vcat $ replicate 4 "aa") <>
---                     vfill "|")
---     @?= ("|aa|\n|aa|\n|aa|\n|aa|" :: Text)
 
  , testCase "nest" $
      render Nothing (nest 4 "aa\n\nbb\ncc")
