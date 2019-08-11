@@ -27,13 +27,11 @@ module Text.DocLayout (
      , flush
      , nest
      , hang
---     , aligned
+     , aligned
      , alignLeft
      , alignRight
      , alignCenter
      , nowrap
---     , withColumn
---     , withLineLength
      , afterBreak
      , offset
      , minOffset
@@ -91,6 +89,7 @@ data Alignment = AlLeft | AlRight | AlCenter
 data PrefixChange =
     AddPrefix Doc
   | SetPrefix Doc
+  | NestToColumn
   deriving (Show, Eq, Ord)
 
 data Doc
@@ -218,6 +217,10 @@ blankline = VFill 1
 -- (@blanklines m <> blanklines n@ has the same effect as @blanklines (max m n)@.
 blanklines :: Int -> Doc
 blanklines n = VFill n
+
+-- | Set nesting to current column.
+aligned :: Doc -> Doc
+aligned doc = PushPrefix NestToColumn <> doc <> PopPrefix
 
 -- | Makes a 'Doc' flush against the left margin.
 flush :: Doc -> Doc
@@ -569,6 +572,11 @@ processDoc d = do
           st{ stNesting = N.head (stNesting st) <> nd N.<| stNesting st }
     PushPrefix (SetPrefix nd) ->
       modify $ \st -> st{ stNesting = nd N.<| stNesting st }
+    PushPrefix NestToColumn ->
+      modify $ \st -> st{ stNesting =
+          let nesting' = N.head (stNesting st)
+              nw = widthOf nesting'
+          in  nesting' <> HFill (col - nw) N.<| stNesting st }
     PopPrefix ->
       modify $ \st -> st{ stNesting =
                           case N.uncons (stNesting st) of

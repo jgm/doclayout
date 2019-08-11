@@ -66,9 +66,9 @@ tests =
                      hang 4 "  - " (chomp "dd\n" <> cr))
      @?= ("  - aa\n\n    bb\n    cc\n  - dd" :: Text)
 
--- , testCase "aligned" $
---     render Nothing ("aa" <> aligned ("bb" $$ "cc") <> "dd")
---     @?= ("aabb\n  ccdd" :: Text)
+ , testCase "aligned" $
+     render Nothing ("aa" <> aligned ("bb" $$ "cc") <> "dd")
+     @?= ("aabb\n  ccdd" :: Text)
 
  , testCase "align with box" $
      render Nothing ("aa" <> box 2 ("bb" $$ "cc") <> "dd")
