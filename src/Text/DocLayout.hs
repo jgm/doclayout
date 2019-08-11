@@ -268,14 +268,11 @@ hcat = mconcat
 -- | Concatenate two 'Doc's, putting breakable space between them.
 infixr 6 <+>
 (<+>) :: Doc -> Doc -> Doc
-(<+>) x y
-  | isEmpty x = y
-  | isEmpty y = x
-  | otherwise = x <> space <> y
+(<+>) x y = x <> space <> y
 
 -- | Same as 'cat', but putting breakable spaces between the 'Doc's.
 hsep :: [Doc] -> Doc
-hsep = foldr (<+>) mempty
+hsep = foldr1 (<+>) . filter (not . isEmpty)
 
 -- | Chomps trailing blank space off of a 'Doc'.
 chomp :: Doc -> Doc
@@ -335,26 +332,20 @@ afterBreak d = AfterBreak d
 infixr 5 $$
 -- | @a $$ b@ puts @a@ above @b@.
 ($$) :: Doc -> Doc -> Doc
-($$) x y
-  | isEmpty x = y
-  | isEmpty y = x
-  | otherwise = x <> cr <> y
+($$) x y = x <> cr <> y
 
 infixr 5 $+$
 -- | @a $+$ b@ puts @a@ above @b@, with a blank line between.
 ($+$) :: Doc -> Doc -> Doc
-($+$) x y
-  | isEmpty x = y
-  | isEmpty y = x
-  | otherwise = x <> blankline <> y
+($+$) x y = x <> blankline <> y
 
 -- | List version of '$$'.
 vcat :: [Doc] -> Doc
-vcat = foldr ($$) empty
+vcat = foldr1 ($$)
 
 -- | List version of '$+$'.
 vsep :: [Doc] -> Doc
-vsep = foldr ($+$) empty
+vsep = foldr1 ($+$)
 
 -- | A box with the specified width.  If content can't fit
 -- in the width, it is silently truncated.
