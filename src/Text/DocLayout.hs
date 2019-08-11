@@ -47,6 +47,7 @@ module Text.DocLayout (
      , ($+$)
      , isEmpty
      , empty
+     , isBlank
      , cat
      , hcat
      , hsep
