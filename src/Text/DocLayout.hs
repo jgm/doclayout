@@ -123,6 +123,9 @@ instance Semigroup Doc where
   VFill m <> LineBreak = VFill m
   x <> Empty = x
   Empty <> x = x
+  LineBreak <> PopPrefix = Concat PopPrefix LineBreak
+  SoftBreak <> PopPrefix = Concat PopPrefix SoftBreak
+  VFill n   <> PopPrefix = Concat PopPrefix (VFill n)
   x <> y = Concat x y
 
 instance Monoid Doc where
@@ -581,10 +584,11 @@ processDoc d = do
         -- as with 'hang':
         when (isEmpty ch) $
             modify $ \st -> st{ stCurrentPrefix = N.head (stPrefix st) }
-    PopPrefix -> modify $ \st ->
-                   st{ stPrefix = case N.uncons (stPrefix st) of
-                                     (_, Just l) -> l
-                                     (_, Nothing) -> stPrefix st }
+    PopPrefix ->
+        modify $ \st ->
+          st{ stPrefix = case N.uncons (stPrefix st) of
+                            (_, Just l) -> l
+                            (_, Nothing) -> stPrefix st }
     LineBreak -> flushCurrent
     SoftBreak -> flushChunk
     VFill n -> do
