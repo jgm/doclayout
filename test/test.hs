@@ -173,8 +173,12 @@ tests =
       render Nothing ("aa" $$ nest 3 mempty $$ "bb")
       @?= ("aa\nbb" :: Text)
 
-   , testCase "hsep with empty" $
+  , testCase "hsep with empty" $
       render Nothing (hsep ["a",mempty,"b"])
+      @?= ("a b" :: Text)
+
+   , testCase "(<+>) with empty" $
+      render Nothing ("a" <+> mempty <+> "b")
       @?= ("a b" :: Text)
 
   , testCase "vcat doesn't create newline at end" $
