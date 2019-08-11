@@ -349,7 +349,7 @@ box :: Int -> Doc -> Doc
 box n doc = Box False n doc
 
 -- | An expandable box with the specified width.  If content can't fit
--- in the width, it is silently truncated.
+-- in the width, the box is expanded.
 expandableBox :: Int -> Doc -> Doc
 expandableBox n doc = Box True n doc
 
