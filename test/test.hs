@@ -165,7 +165,7 @@ tests =
           "x" <> afterBreak "?")
       @?= ("hi\n!x" :: Text)
 
-  , testCase "breaks and vest" $
+  , testCase "breaks and nest" $
       render (Just 5) ("[" <> nest 1 ("aaaaaaaaa" $$ "bbbbbbb") <> "]")
       @?= ("[aaaaaaaaa\n bbbbbbbb]" :: Text)
 
