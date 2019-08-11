@@ -335,7 +335,10 @@ afterBreak d = AfterBreak d
 infixr 5 $$
 -- | @a $$ b@ puts @a@ above @b@.
 ($$) :: Doc -> Doc -> Doc
-($$) x y = x <> cr <> y
+($$) x y
+  | isEmpty x = y
+  | isEmpty y = x
+  | otherwise = x <> cr <> y
 
 infixr 5 $+$
 -- | @a $+$ b@ puts @a@ above @b@, with a blank line between.
