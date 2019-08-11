@@ -167,6 +167,6 @@ tests =
 
   , testCase "breaks and nest" $
       render (Just 5) ("[" <> nest 1 ("aaaaaaaaa" $$ "bbbbbbb") <> "]")
-      @?= ("[aaaaaaaaa\n bbbbbbbb]" :: Text)
+      @?= ("[aaaaaaaaa\n bbbbbbb]" :: Text)
 
   ]
