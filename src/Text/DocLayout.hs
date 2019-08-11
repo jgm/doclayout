@@ -94,6 +94,7 @@ data PrefixChange =
 data Doc
   = Empty
   | SoftBreak
+  | SoftSpace
   | LineBreak
   | HFill !Int
   | VFill !Int
@@ -119,6 +120,11 @@ instance Semigroup Doc where
   SoftBreak <> SoftBreak = SoftBreak
   LineBreak <> SoftBreak = LineBreak
   SoftBreak <> LineBreak = LineBreak
+  SoftSpace <> SoftSpace = SoftSpace
+  SoftSpace <> SoftBreak = SoftSpace
+  SoftBreak <> SoftSpace = SoftSpace
+  SoftSpace <> LineBreak = LineBreak
+  LineBreak <> SoftSpace = LineBreak
   VFill m <> VFill n = VFill (max m n)
   LineBreak <> VFill m = VFill m
   VFill m <> LineBreak = VFill m
@@ -214,7 +220,7 @@ softBreak = SoftBreak
 
 -- | A breaking (reflowable) space.
 space :: Doc
-space = SoftBreak <> HFill 1
+space = SoftSpace
 
 -- | Inserts a blank line unless one exists already.
 -- (@blankline <> blankline@ has the same effect as @blankline@.
@@ -272,7 +278,7 @@ infixr 6 <+>
 
 -- | Same as 'cat', but putting breakable spaces between the 'Doc's.
 hsep :: [Doc] -> Doc
-hsep = foldr1 (<+>) . filter (not . isEmpty)
+hsep = foldr1 (<+>)
 
 -- | Chomps trailing blank space off of a 'Doc'.
 chomp :: Doc -> Doc
@@ -280,6 +286,7 @@ chomp d =
   case d of
     Empty -> Empty
     SoftBreak -> Empty
+    SoftSpace -> Empty
     LineBreak -> Empty
     HFill{} -> Empty
     VFill{} -> Empty
@@ -288,6 +295,14 @@ chomp d =
         x | not (isPrintable x) -> chomp d1 <> x
         x -> d1 <> x
     _ -> d
+ where
+   isPrintable :: Doc -> Bool
+   isPrintable (Lit n _) = n > 0
+   isPrintable Box{} = True
+   isPrintable AfterBreak{} = True
+   isPrintable (Concat x y) = isPrintable x || isPrintable y
+   isPrintable _ = False
+
 
 -- | Remove leading blank lines.
 nestle :: Doc -> Doc
@@ -376,6 +391,7 @@ nowrap :: Doc -> Doc
 nowrap d =
   case d of
     SoftBreak -> Empty
+    SoftSpace -> HFill 1
     Concat d1 d2 -> nowrap d1 <> nowrap d2
     _ -> d
 
@@ -461,6 +477,9 @@ handleBoxes ds =
     case d of
       HFill n | padRight  -> return [padLine n]
               | otherwise -> return [Line 0 mempty] -- ignore final hfill
+      SoftSpace
+              | padRight  -> return [padLine 1]
+              | otherwise -> return [Line 0 mempty] -- ignore final soft space
       AfterBreak{} -> return []
       Lit n t -> return [Line n (B.fromText t)]
       Box expandable w d'
@@ -527,6 +546,7 @@ isBlank Empty           = True
 isBlank HFill{}         = True
 isBlank LineBreak       = True
 isBlank SoftBreak       = True
+isBlank SoftSpace       = True
 isBlank VFill{}         = True
 isBlank PushPrefix{}    = True
 isBlank PopPrefix       = True
@@ -539,6 +559,7 @@ widthOf :: Doc -> Int
 widthOf d =
   case d of
     HFill n      -> n
+    SoftSpace    -> 1
     Lit n _      -> n
     Box _ w _    -> w
     AfterBreak _ -> 0
@@ -592,6 +613,9 @@ processDoc d = do
                             (_, Nothing) -> stPrefix st }
     LineBreak -> flushCurrent
     SoftBreak -> flushChunk
+    SoftSpace -> do
+        flushChunk
+        modify $ \st -> st{ stChunk = stChunk st <> SoftSpace }
     VFill n -> do
         flushCurrent
         modify $ \st ->
@@ -612,7 +636,7 @@ flushChunk = do
     Just cur
       | maybe False (< col + w) linelen -> do -- doesn't fit, create line
          let (d',w') = case d of
-                         Concat (HFill n) x -> (x, w - n)
+                         Concat SoftSpace x -> (x, w - 1)
                          _ -> (d, w)
          modify $ \st ->
            st{ stLines = addAlignment linelen alignment cur : stLines st
@@ -629,13 +653,6 @@ flushChunk = do
           , stColumn = widthOf prefix + w }
   modify $ \st -> st{ stCurrentPrefix = newPrefix
                     , stChunk = mempty }
-
-isPrintable :: Doc -> Bool
-isPrintable (Lit n _) = n > 0
-isPrintable Box{} = True
-isPrintable AfterBreak{} = True
-isPrintable (Concat x y) = isPrintable x || isPrintable y
-isPrintable _ = False
 
 -- | Returns width of a character in a monospace font:  0 for a combining
 -- character, 1 for a regular character, 2 for an East Asian wide character.
