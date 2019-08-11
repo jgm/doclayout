@@ -420,7 +420,7 @@ toLines linelen doc = (dimensions, ls)
      , stChunk = mempty
      , stCurrentPrefix = mempty
      , stCurrent = Nothing
-     , stNesting = N.fromList [mempty]
+     , stPrefix = N.fromList [mempty]
      , stAlignment = N.fromList [AlLeft]
      , stMaxWidth = 0
      }
@@ -432,7 +432,7 @@ data RenderState =
   , stChunk         :: Doc
   , stCurrentPrefix :: Doc
   , stCurrent       :: Maybe Doc
-  , stNesting       :: N.NonEmpty Doc
+  , stPrefix        :: N.NonEmpty Doc
   , stAlignment     :: N.NonEmpty Alignment
   , stMaxWidth      :: !Int
   } deriving (Show)
@@ -554,7 +554,7 @@ addAlignment linelen alignment doc =
 processDoc :: Doc -> Renderer ()
 processDoc d = do
   col <- gets stColumn
-  nesting <- N.head <$> gets stNesting
+  prefix <- N.head <$> gets stPrefix
   case d of
     Empty -> flushChunk
     PushAlignment al -> modify $ \st ->
@@ -566,31 +566,31 @@ processDoc d = do
                   (_, Nothing) -> stAlignment st }
     PushPrefix change -> do
         modify $ \st ->
-          let nesting' = N.head (stNesting st)
-              nw = widthOf nesting'
-           in st{ stNesting =
+          let prefix' = N.head (stPrefix st)
+              nw = widthOf prefix'
+           in st{ stPrefix =
                    case change of
                      AddPrefix nd ->
-                        N.head (stNesting st) <> nd N.<| stNesting st
-                     SetPrefix nd -> nd N.<| stNesting st
+                        N.head (stPrefix st) <> nd N.<| stPrefix st
+                     SetPrefix nd -> nd N.<| stPrefix st
                      NestToColumn ->
-                         nesting' <> HFill (col - nw) N.<| stNesting st }
+                         prefix' <> HFill (col - nw) N.<| stPrefix st }
         ch <- gets stChunk
-        -- this is needed to avoid nesting when the 'nest'
+        -- this is needed to avoid prefix when the 'nest'
         -- is called after there is already content on a line,
         -- as with 'hang':
         when (isEmpty ch) $
-            modify $ \st -> st{ stCurrentPrefix = N.head (stNesting st) }
+            modify $ \st -> st{ stCurrentPrefix = N.head (stPrefix st) }
     PopPrefix -> modify $ \st ->
-                   st{ stNesting = case N.uncons (stNesting st) of
+                   st{ stPrefix = case N.uncons (stPrefix st) of
                                      (_, Just l) -> l
-                                     (_, Nothing) -> stNesting st }
+                                     (_, Nothing) -> stPrefix st }
     LineBreak -> flushCurrent
     SoftBreak -> flushChunk
     VFill n -> do
         flushCurrent
         modify $ \st ->
-           st{ stLines = replicate n (chomp nesting) ++ stLines st }
+           st{ stLines = replicate n (chomp prefix) ++ stLines st }
     _ -> modify $ \st -> st{ stChunk = stChunk st <> d }
 
 flushChunk :: Renderer ()
@@ -601,7 +601,7 @@ flushChunk = do
   let w = widthOf d
   mbcur <- gets stCurrent
   prefix <- gets stCurrentPrefix
-  newPrefix <- N.head <$> gets stNesting
+  newPrefix <- N.head <$> gets stPrefix
   alignment <- N.head <$> gets stAlignment
   case mbcur of
     Just cur
