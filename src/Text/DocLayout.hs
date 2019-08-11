@@ -8,10 +8,8 @@ including wrapped text, indentated blocks, and tables.
 -}
 
 module Text.DocLayout (
-       Doc(..)
+       Doc
      , Dimensions(..)
-     , Alignment(..)
-     , PrefixChange(..)
      , render
      , getDimensions
      , cr
