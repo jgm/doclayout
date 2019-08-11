@@ -89,8 +89,8 @@ data Alignment = AlLeft | AlRight | AlCenter
   deriving (Show, Eq, Ord)
 
 data NestingChange =
-    IncreaseNesting !Int
-  | SetNesting !Int
+    AddNesting Doc
+  | SetNesting Doc
   deriving (Show, Eq, Ord)
 
 data Doc
@@ -220,11 +220,11 @@ blanklines n = VFill n
 
 -- | Makes a 'Doc' flush against the left margin.
 flush :: Doc -> Doc
-flush doc = PushNesting (SetNesting 0) <> doc <> PopNesting
+flush doc = PushNesting (SetNesting mempty) <> doc <> PopNesting
 
 -- | Indents a 'Doc' by the specified number of spaces.
 nest :: Int -> Doc -> Doc
-nest ind doc = PushNesting (IncreaseNesting ind) <> doc <> PopNesting
+nest ind doc = PushNesting (AddNesting (HFill ind)) <> doc <> PopNesting
 
 -- | A hanging indent. @hang ind start doc@ prints @start@,
 -- then @doc@, leaving an indent of @ind@ spaces on every
@@ -526,11 +526,11 @@ processDoc d = do
                           case N.uncons (stAlignment st) of
                             (_, Just l)  -> l
                             (_, Nothing) -> stAlignment st }
-    PushNesting (IncreaseNesting n) ->
+    PushNesting (AddNesting nd) ->
       modify $ \st ->
-          st{ stNesting = N.head (stNesting st) <> HFill n N.<| stNesting st }
-    PushNesting (SetNesting n) ->
-      modify $ \st -> st{ stNesting = HFill n N.<| stNesting st }
+          st{ stNesting = N.head (stNesting st) <> nd N.<| stNesting st }
+    PushNesting (SetNesting nd) ->
+      modify $ \st -> st{ stNesting = nd N.<| stNesting st }
     PopNesting ->
       modify $ \st -> st{ stNesting =
                           case N.uncons (stNesting st) of
