@@ -241,7 +241,7 @@ prefixed :: String -> Doc -> Doc
 prefixed pref doc =
   PushPrefix (AddPrefix prefdoc) <> doc <> PopPrefix
  where
-  prefdoc = Lit (length bs) (T.pack $ reverse bs) <>
+  prefdoc = text (reverse bs) <>
             case length as of
               0 -> mempty
               n -> HFill n
