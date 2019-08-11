@@ -15,6 +15,7 @@ module Text.DocLayout (
      , cr
      , blankline
      , blanklines
+     , softBreak
      , space
      , text
      , lit
@@ -205,6 +206,10 @@ lit s  = Lit (realLength s) (T.pack s)
 cr :: Doc
 cr = LineBreak
 
+-- | A soft break point (no space).
+softBreak :: Doc
+softBreak = SoftBreak
+
 -- | A breaking (reflowable) space.
 space :: Doc
 space = SoftBreak <> HFill 1
@@ -221,7 +226,7 @@ blanklines n = VFill n
 
 -- | Set nesting to current column.
 aligned :: Doc -> Doc
-aligned doc = PushPrefix NestToColumn <> doc <> PopPrefix
+aligned doc = SoftBreak <> PushPrefix NestToColumn <> doc <> PopPrefix
 
 -- | Makes a 'Doc' flush against the left margin.
 flush :: Doc -> Doc
