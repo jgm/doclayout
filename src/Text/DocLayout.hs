@@ -127,6 +127,8 @@ instance Semigroup Doc where
   LineBreak <> PopPrefix = Concat PopPrefix LineBreak
   SoftBreak <> PopPrefix = Concat PopPrefix SoftBreak
   VFill n   <> PopPrefix = Concat PopPrefix (VFill n)
+  PushPrefix _ <> PopPrefix = Empty
+  PushAlignment _ <> PopAlignment = Empty
   x <> y = Concat x y
 
 instance Monoid Doc where
