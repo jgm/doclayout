@@ -580,6 +580,10 @@ processDoc d = do
                           case N.uncons (stNesting st) of
                             (_, Just l) -> l
                             (_, Nothing) -> stNesting st }
+    HFill n -> -- HFill by itself is probabyl before a PushNesting
+       modify $ \st ->
+         st{ stCurrent = Just $ maybe d (<> d) $ stCurrent st
+           , stColumn = col + n }
     LineBreak ->
        modify $ \st ->
          case mbcur of
