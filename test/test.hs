@@ -184,4 +184,8 @@ tests =
   , testCase "vcat doesn't create newline at end" $
       render Nothing (vcat ["aa","bb"] <> "cc")
       @?= ("aa\nbbcc" :: Text)
+
+  , testCase "vcat []" $
+      render Nothing (vcat [])
+      @?= ("" :: Text)
   ]

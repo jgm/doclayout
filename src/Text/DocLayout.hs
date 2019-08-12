@@ -278,7 +278,8 @@ infixr 6 <+>
 
 -- | Same as 'cat', but putting breakable spaces between the 'Doc's.
 hsep :: [Doc] -> Doc
-hsep = foldr1 (<+>)
+hsep [] = mempty
+hsep xs = foldr1 (<+>) xs
 
 -- | Chomps trailing blank space off of a 'Doc'.
 chomp :: Doc -> Doc
@@ -356,11 +357,13 @@ infixr 5 $+$
 
 -- | List version of '$$'.
 vcat :: [Doc] -> Doc
-vcat = foldr1 ($$)
+vcat [] = mempty
+vcat xs = foldr1 ($$) xs
 
 -- | List version of '$+$'.
 vsep :: [Doc] -> Doc
-vsep = foldr1 ($+$)
+vsep [] = mempty
+vsep xs = foldr1 ($+$) xs
 
 -- | A box with the specified width.  If content can't fit
 -- in the width, it is silently truncated.
