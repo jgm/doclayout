@@ -68,13 +68,14 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.List.NonEmpty as N
+import Data.Maybe (isNothing)
 import Data.String
 import Data.List (foldl', intersperse)
 import Control.Monad.RWS.Strict
 import qualified Data.Text.Lazy.Builder as B
 import Data.Text.Lazy.Builder (Builder)
 import Data.String.Conversions (ConvertibleStrings(..), LazyText)
-import Safe (maximumDef)
+import Safe (maximumDef, headDef)
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup (Semigroup)
@@ -290,7 +291,6 @@ chomp :: Doc -> Doc
 chomp d =
   case d of
     Empty -> Empty
-    SoftBreak -> Empty
     SoftSpace -> Empty
     LineBreak -> Empty
     HFill{} -> Empty
@@ -466,7 +466,7 @@ toLines linelen doc = (dimensions, ls)
 data RenderState =
   RenderState
   { stColumn        :: !Int
-  , stLines         :: [Doc]
+  , stLines         :: [(Doc,Doc)]
   , stChunk         :: Doc
   , stCurrentPrefix :: Doc
   , stCurrent       :: Maybe Doc
@@ -480,18 +480,25 @@ type Renderer = RWS (Maybe Int) Dimensions RenderState
 extractLines :: Doc -> Renderer [Line]
 extractLines = reflowChunks . unfoldDoc >=> handleBoxes
 
-handleBoxes :: [Doc] -> Renderer [Line]
+handleBoxes :: [(Doc,Doc)] -> Renderer [Line]
 handleBoxes ds =
   mconcat <$> mapM
-    (mkLines False . resolveAfterBreak >=> adjustDimensions) ds
+    (mkLines . resolveAfterBreak >=> adjustDimensions) ds
  where
   adjustDimensions ls = do
     tell $ Dimensions (maximumDef 0 $ map lineWidth ls) (length ls)
     return ls
-  resolveAfterBreak (AfterBreak d) = d
-  resolveAfterBreak (Concat (AfterBreak d) y) = Concat d y
-  resolveAfterBreak d = d
-  mkLines padRight d =
+  resolveAfterBreak (p, AfterBreak d) = (p, d)
+  resolveAfterBreak (p, Concat (AfterBreak d) y) = (p, Concat d y)
+  resolveAfterBreak (p, d) = (p, d)
+  mkLines (p, d) = do
+    pPartWithBlank <- headDef mempty <$> mkLines' False p
+    pPartWithText <- headDef mempty <$> mkLines' False (p <> lit "")
+    map (\d' -> if lineWidth d' == 0
+                   then pPartWithBlank <> d'
+                   else pPartWithText <> d')
+         <$> mkLines' False d
+  mkLines' padRight d =
     case d of
       HFill n | padRight  -> return [padLine n]
               | otherwise -> return [Line 0 mempty] -- ignore final hfill
@@ -512,8 +519,8 @@ handleBoxes ds =
                                 _               -> map (trunc w)
                  in return $ adjust ls
       Concat d1 d2 -> do
-          d2lines <- mkLines False d2
-          d1lines <- mkLines (not (null d2lines)) d1
+          d2lines <- mkLines' False d2
+          d1lines <- mkLines' (not (null d2lines)) d1
           return $ combineLines (widthOf d1) (widthOf d2) d1lines d2lines
       _ -> return [Line 0 mempty]
 
@@ -541,23 +548,28 @@ unfoldDoc (Concat x y) =
   x : unfoldDoc y
 unfoldDoc x = [x]
 
-reflowChunks :: [Doc] -> Renderer [Doc]
+reflowChunks :: [Doc] -> Renderer [(Doc,Doc)]  -- first is prefix
 reflowChunks ds = do
   mapM processDoc ds
   flushCurrent
-  dropWhile isBlank . reverse . dropWhile isBlank <$> gets stLines
+  dropWhile (isBlank . snd) . reverse . dropWhile (isBlank . snd) <$>
+      gets stLines
 
 flushCurrent :: Renderer ()
 flushCurrent = do
   linelen <- ask
   alignment <- N.head <$> gets stAlignment
+  prefix <- gets stCurrentPrefix
   flushChunk
   modify $ \st ->
     st{ stLines =
-          maybe id ((:) . addAlignment linelen alignment) (stCurrent st)
-          (stLines st)
+          case stCurrent st of
+            Just cur -> (prefix, addAlignment linelen alignment cur) :
+                        stLines st
+            Nothing  -> stLines st
       , stCurrent = Nothing
-      , stColumn = 0 }
+      , stColumn = 0
+      , stCurrentPrefix = N.head (stPrefix st) }
 
 isBlank :: Doc -> Bool
 isBlank Empty           = True
@@ -619,12 +631,13 @@ processDoc d = do
                      NestToColumn ->
                          prefix' <> HFill (col - nw) N.<| stPrefix st }
         ch <- gets stChunk
+        cur <- gets stCurrent
         -- this is needed to avoid prefix when the 'nest'
         -- is called after there is already content on a line,
         -- as with 'hang':
-        when (isEmpty ch) $
+        when (isEmpty ch && isNothing cur) $
             modify $ \st -> st{ stCurrentPrefix = N.head (stPrefix st) }
-    PopPrefix ->
+    PopPrefix -> do
         modify $ \st ->
           st{ stPrefix = case N.uncons (stPrefix st) of
                             (_, Just l) -> l
@@ -637,7 +650,7 @@ processDoc d = do
     VFill n -> do
         flushCurrent
         modify $ \st ->
-           st{ stLines = replicate n (chomp prefix) ++ stLines st }
+           st{ stLines = replicate n (chomp prefix, mempty) ++ stLines st }
     _ -> modify $ \st -> st{ stChunk = stChunk st <> d }
 
 flushChunk :: Renderer ()
@@ -647,9 +660,8 @@ flushChunk = do
   d <- gets stChunk
   let w = widthOf d
   mbcur <- gets stCurrent
-  prefix <- gets stCurrentPrefix
-  newPrefix <- N.head <$> gets stPrefix
   alignment <- N.head <$> gets stAlignment
+  prefix <- gets stCurrentPrefix
   case mbcur of
     Just cur
       | maybe False (< col + w) linelen -> do -- doesn't fit, create line
@@ -657,20 +669,20 @@ flushChunk = do
                          Concat SoftSpace x -> (x, w - 1)
                          _ -> (d, w)
          modify $ \st ->
-           st{ stLines = addAlignment linelen alignment cur : stLines st
-             , stCurrent = Just (prefix <> d')
-             , stColumn = widthOf prefix + w' }
+           st{ stLines = (prefix, addAlignment linelen alignment cur) :
+                         stLines st
+             , stCurrent = Just d'
+             , stColumn = widthOf prefix + w'
+             , stCurrentPrefix = N.head (stPrefix st) }
       | otherwise -> -- fits
          modify $ \st ->
            st{ stCurrent = Just (cur <> d)
              , stColumn = col + w }
     Nothing ->  -- nothing yet on line
       modify $ \st ->
-        st{ stLines = stLines st
-          , stCurrent = Just (prefix <> d)
+        st{ stCurrent = Just d
           , stColumn = widthOf prefix + w }
-  modify $ \st -> st{ stCurrentPrefix = newPrefix
-                    , stChunk = mempty }
+  modify $ \st -> st{ stChunk = mempty }
 
 -- | Returns width of a character in a monospace font:  0 for a combining
 -- character, 1 for a regular character, 2 for an East Asian wide character.
