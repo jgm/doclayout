@@ -241,8 +241,10 @@ flush :: Doc -> Doc
 flush doc = PushPrefix (SetPrefix mempty) <> doc <> PopPrefix
 
 -- | Indents a 'Doc' by the specified number of spaces.
+-- Leading and trailing blank lines are removed for backwards
+-- compatibility.
 nest :: Int -> Doc -> Doc
-nest ind doc = PushPrefix (AddPrefix (HFill ind)) <> doc <> PopPrefix
+nest ind doc = PushPrefix (AddPrefix (HFill ind)) <> nestle doc <> PopPrefix
 
 -- | A hanging indent. @hang ind start doc@ prints @start@,
 -- then @doc@, leaving an indent of @ind@ spaces on every
