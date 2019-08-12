@@ -67,10 +67,10 @@ tests =
      ("a" <> space <> box 3 mempty)
      "a"
 
- , renderTest "centered"
-     (Just 10)
-     (alignCenter "hi\nlow")
-     "    hi\n   low"
+-- , renderTest "centered"
+--     (Just 10)
+--     (alignCenter "hi\nlow")
+--     "    hi\n   low"
 
  , renderTest "nest"
      Nothing
@@ -93,10 +93,10 @@ tests =
      ("aa" <> box 2 ("bb" $$ "cc") <> "dd")
      "aabbdd\n  cc"
 
- , renderTest "centered box"
-     Nothing
-     ("aa" <> box 4 (alignCenter $ "bb" $$ "cc") <> "dd")
-     "aa bb dd\n   cc"
+-- , renderTest "centered box"
+--     Nothing
+--     ("aa" <> box 4 (alignCenter $ "bb" $$ "cc") <> "dd")
+--     "aa bb dd\n   cc"
 
  , renderTest "blanks at beginning"
      Nothing
@@ -118,10 +118,10 @@ tests =
      (nest 2 (nest 3 ("aa" <> blankline) <> cr <> blanklines 2) <> blanklines 2)
      "     aa"
 
- , renderTest "blanks at end with alignment"
-     Nothing
-     (alignLeft ("aa" <> blankline) <> cr <> blankline)
-     "aa"
+-- , renderTest "blanks at end with alignment"
+--     Nothing
+--     (alignLeft ("aa" <> blankline) <> cr <> blankline)
+--     "aa"
 
  , renderTest "blanks around cr"
      Nothing
@@ -183,10 +183,10 @@ tests =
      ("aa" <> space <> "bbbbb" <> "ccccc")
      "aa\nbbbbbccccc"
 
- , testCase "getDimensions" $
-    let foo = "A baosnetuh snaothsn aoesnth aoesnth aosenth sentuhaoeu"
-    in getDimensions Nothing (hsep (map text $ words $ foo) <> cr <> "bar")
-    @?= Dimensions (length foo) 2
+-- , testCase "getDimensions" $
+--    let foo = "A baosnetuh snaothsn aoesnth aoesnth aosenth sentuhaoeu"
+--    in getDimensions Nothing (hsep (map text $ words $ foo) <> cr <> "bar")
+--    @?= Dimensions (length foo) 2
 
  , renderTest "nested wrapped text"
     (Just 10)

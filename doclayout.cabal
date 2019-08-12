@@ -50,7 +50,7 @@ test-suite doclayout-test
 
 test-suite olddoclayout-test
   type:                exitcode-stdio-1.0
-  buildable:           False
+  buildable:           True
   hs-source-dirs:      test, old
   other-modules:       Text.DocLayout
   main-is:             test.hs

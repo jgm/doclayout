@@ -24,6 +24,7 @@ module Text.DocLayout (
      , text
      , char
      , prefixed
+     , aligned
      , flush
      , nest
      , hang
@@ -86,6 +87,7 @@ type DocState a = State (RenderState a) ()
 data D = Text Int String
        | Block Int [String]
        | Prefixed String Doc
+       | Aligned Doc
        | BeforeNonBlank Doc
        | Flush Doc
        | BreakingSpace
@@ -182,6 +184,7 @@ chomp d = Doc (fromList dl')
         go (NewLine : xs)        = go xs
         go (BlankLines _ : xs)   = go xs
         go (Prefixed s d' : xs)  = Prefixed s (chomp d') : xs
+        go (Aligned    d' : xs)  = Aligned   (chomp d') : xs
         go xs                    = xs
 
 outp :: (IsString a) => Int -> String -> DocState a
@@ -240,6 +243,19 @@ renderList (Prefixed pref d : xs) = do
   st <- get
   let oldPref = prefix st
   put st{ prefix = prefix st ++ pref }
+  renderDoc d
+  modify $ \s -> s{ prefix = oldPref }
+  renderList xs
+
+renderList (Aligned d : xs) = do
+  st <- get
+  let oldPref = prefix st
+  let col = column st
+  let newprefix =
+          case length (prefix st) of
+            n | n < col -> prefix st ++ replicate (col - n) ' '
+            _           -> take col (prefix st)
+  put st{ prefix = newprefix }
   renderDoc d
   modify $ \s -> s{ prefix = oldPref }
   renderList xs
@@ -395,6 +411,10 @@ blanklines n = Doc $ singleton (BlankLines n)
 -- of the line).
 prefixed :: String -> Doc -> Doc
 prefixed pref doc = Doc $ singleton $ Prefixed pref doc
+
+-- | Nest content to current column.
+aligned :: Doc -> Doc
+aligned doc = Doc $ singleton $ Aligned doc
 
 -- | Makes a 'Doc' flush against the left margin.
 flush :: Doc -> Doc
