@@ -9,187 +9,237 @@ import Data.Text (Text)
 main :: IO ()
 main = defaultMain $ testGroup "Tests" tests
 
+renderTest :: String -> Maybe Int -> Doc -> Text -> TestTree
+renderTest title mblen doc expected =
+  testCase title $ render mblen doc @?= expected
+
 tests :: [TestTree]
 tests =
   [
-    testCase "simple vcat " $
-      render (Just 10) (vcat $ map chomp ["aaa", "bbb", "ccc"])
-      @?= ("aaa\nbbb\nccc" :: String)
+    renderTest "simple vcat"
+      (Just 10)
+      (vcat $ map chomp ["aaa", "bbb", "ccc"])
+      "aaa\nbbb\nccc"
 
-  , testCase "vcat with chomp" $
-      render (Just 10) (chomp "aaa" $$ chomp "bbb" $$ chomp "ccc")
-      @?= ("aaa\nbbb\nccc" :: String)
+  , renderTest "vcat with chomp"
+      (Just 10)
+      (chomp "aaa" $$ chomp "bbb" $$ chomp "ccc")
+      "aaa\nbbb\nccc"
 
-  , testCase "simple text above line length" $
-      render (Just 4) ("hello" <+> "there")
-      @?= ("hello\nthere" :: String)
+  , renderTest "simple text above line length"
+      (Just 4)
+      ("hello" <+> "there")
+      "hello\nthere"
 
-  , testCase "cr" $
-      render (Just 60) ("hello" <> cr <> "there")
-      @?= ("hello\nthere" :: String)
+  , renderTest "cr"
+      (Just 60)
+      ("hello" <> cr <> "there")
+      "hello\nthere"
 
-  , testCase "x $$ cr" $
-      render Nothing ("x" $$ cr)
-      @?= ("x" :: Text)
+  , renderTest "x $$ cr"
+      Nothing
+      ("x" $$ cr)
+      "x"
 
- , testCase "wrapping" $
-     render (Just 10) (hsep ["hello", "there", "this", "is", "a", "test"])
-     @?= ("hello\nthere this\nis a test" :: String)
+ , renderTest "wrapping"
+     (Just 10)
+     (hsep ["hello", "there", "this", "is", "a", "test"])
+     "hello\nthere this\nis a test"
 
- , testCase "simple box wrapping" $
-     render (Just 50) (box 3 "aa" <> box 3 "bb" <> box 3 ("aa" <+> "bbbb"))
-     @?= ("aa bb aa\n      bbb" :: Text)
+ , renderTest "simple box wrapping"
+     (Just 50)
+     (box 3 "aa" <> box 3 "bb" <> box 3 ("aa" <+> "bbbb"))
+     "aa bb aa\n      bbb"
 
- , testCase "prefixed with multi paragraphs" $
-     render (Just 80) (prefixed "> " ("foo" <+> "bar" <> cr <>
+ , renderTest "prefixed with multi paragraphs"
+     (Just 80)
+     (prefixed "> " ("foo" <+> "bar" <> cr <>
               "baz" <> blankline <> "bim" <+> "bam"))
-     @?= ("> foo bar\n> baz\n>\n> bim bam" :: String)
+     "> foo bar\n> baz\n>\n> bim bam"
 
- , testCase "prefixed with hsep" $
-     render Nothing (prefixed "> " $ hsep ["a","b","c"])
-     @?= ("> a b c" :: Text)
+ , renderTest "prefixed with hsep"
+     Nothing
+     (prefixed "> " $ hsep ["a","b","c"])
+     "> a b c"
 
- , testCase "breaking space before empty box" $
-     render Nothing ("a" <> space <> box 3 mempty)
-     @?= ("a" :: String)
+ , renderTest "breaking space before empty box"
+     Nothing
+     ("a" <> space <> box 3 mempty)
+     "a"
 
- , testCase "centered" $
-     render (Just 10) (alignCenter "hi\nlow")
-     @?= ("    hi\n   low" :: String)
+ , renderTest "centered"
+     (Just 10)
+     (alignCenter "hi\nlow")
+     "    hi\n   low"
 
- , testCase "nest" $
-     render Nothing (nest 4 "aa\n\nbb\ncc")
-     @?= ("    aa\n\n    bb\n    cc" :: Text)
+ , renderTest "nest"
+     Nothing
+     (nest 4 "aa\n\nbb\ncc")
+     "    aa\n\n    bb\n    cc"
 
- , testCase "hang" $
-     render Nothing (hang 4 "  - " (chomp "aa\n\nbb\ncc" <> cr) <>
+ , renderTest "hang"
+     Nothing
+     (hang 4 "  - " (chomp "aa\n\nbb\ncc" <> cr) <>
                      hang 4 "  - " (chomp "dd\n" <> cr))
-     @?= ("  - aa\n\n    bb\n    cc\n  - dd" :: Text)
+     "  - aa\n\n    bb\n    cc\n  - dd"
 
- , testCase "aligned" $
-     render Nothing ("aa" <> aligned ("bb" $$ "cc") <> "dd")
-     @?= ("aabb\n  ccdd" :: Text)
+ , renderTest "aligned"
+     Nothing
+     ("aa" <> aligned ("bb" $$ "cc") <> "dd")
+     "aabb\n  ccdd"
 
- , testCase "align with box" $
-     render Nothing ("aa" <> box 2 ("bb" $$ "cc") <> "dd")
-     @?= ("aabbdd\n  cc" :: Text)
+ , renderTest "align with box"
+     Nothing
+     ("aa" <> box 2 ("bb" $$ "cc") <> "dd")
+     "aabbdd\n  cc"
 
- , testCase "centered box" $
-     render Nothing ("aa" <> box 4 (alignCenter $ "bb" $$ "cc") <> "dd")
-     @?= ("aa bb dd\n   cc" :: Text)
+ , renderTest "centered box"
+     Nothing
+     ("aa" <> box 4 (alignCenter $ "bb" $$ "cc") <> "dd")
+     "aa bb dd\n   cc"
 
- , testCase "blanks at beginning" $
-     render Nothing (blanklines 2 <> "aa")
-     @?= ("aa" :: Text)
+ , renderTest "blanks at beginning"
+     Nothing
+     (blanklines 2 <> "aa")
+     "aa"
 
- , testCase "blanks at end" $
-     render Nothing ("aa" <> blanklines 2)
-     @?= ("aa" :: Text)
+ , renderTest "blanks at end"
+     Nothing
+     ("aa" <> blanklines 2)
+     "aa"
 
- , testCase "blanks at end with multiple" $
-     render Nothing ("aa" <> cr <> blanklines 2 <> blanklines 0)
-     @?= ("aa" :: Text)
+ , renderTest "blanks at end with multiple"
+     Nothing
+     ("aa" <> cr <> blanklines 2 <> blanklines 0)
+     "aa"
 
- , testCase "blanks at end with nesting" $
-     render Nothing (nest 2 (nest 3 ("aa" <> blankline) <> cr <> blanklines 2) <> blanklines 2)
-     @?= ("     aa" :: Text)
+ , renderTest "blanks at end with nesting"
+     Nothing
+     (nest 2 (nest 3 ("aa" <> blankline) <> cr <> blanklines 2) <> blanklines 2)
+     "     aa"
 
- , testCase "blanks at end with alignment" $
-     render Nothing (alignLeft ("aa" <> blankline) <> cr <> blankline)
-     @?= ("aa" :: Text)
+ , renderTest "blanks at end with alignment"
+     Nothing
+     (alignLeft ("aa" <> blankline) <> cr <> blankline)
+     "aa"
 
- , testCase "blanks around cr" $
-     render Nothing ("aa" <> blankline <> cr <> blankline <> "bb")
-     @?= ("aa\n\nbb" :: Text)
+ , renderTest "blanks around cr"
+     Nothing
+     ("aa" <> blankline <> cr <> blankline <> "bb")
+     "aa\n\nbb"
 
-  , testCase "strange wrap case" $
-     render (Just 8) (vcat [hang 2 "- " (chomp $ text "aaaaa" <> space <> "bbb"), hang 2 "- " (text "aoeu")])
-     @?= ("- aaaaa\n  bbb\n- aoeu" :: Text)
+  , renderTest "strange wrap case"
+     (Just 8)
+     (vcat [hang 2 "- " (chomp $ text "aaaaa" <> space <> "bbb"), hang 2 "- " (text "aoeu")])
+     "- aaaaa\n  bbb\n- aoeu"
 
-  , testCase "strange wrap case" $
-     render (Just 8) (text "aaaaa" <> space <> text "bbbbb" <> blankline <> text "ccccc")
-     @?= ("aaaaa\nbbbbb\n\nccccc" :: Text)
+  , renderTest "strange wrap case"
+     (Just 8)
+     (text "aaaaa" <> space <> text "bbbbb" <> blankline <> text "ccccc")
+     "aaaaa\nbbbbb\n\nccccc"
 
- , testCase "chomp 1" $
-     render Nothing (chomp (("aa" <> space) <> blankline) <> "bb")
-     @?= ("aabb" :: Text)
+ , renderTest "chomp 1"
+     Nothing
+     (chomp (("aa" <> space) <> blankline) <> "bb")
+     "aabb"
 
- , testCase "chomp 2" $
-     render Nothing (chomp ("aa" <> space) <> "bb")
-     @?= ("aabb" :: Text)
+ , renderTest "chomp 2"
+     Nothing
+     (chomp ("aa" <> space) <> "bb")
+     "aabb"
 
- , testCase "chomp 3" $
-     render Nothing (chomp "aa")
-     @?= ("aa" :: Text)
+ , renderTest "chomp 3"
+     Nothing
+     (chomp "aa")
+     "aa"
 
- , testCase "chomp with nesting" $
-     render Nothing (chomp (nest 3 ("aa" <> blankline)) <> "bb")
-     @?= ("   aabb" :: Text)
+ , renderTest "chomp with nesting"
+     Nothing
+     (chomp (nest 3 ("aa" <> blankline)) <> "bb")
+     "   aabb"
 
- , testCase "chomp with box at end" $
-     render Nothing ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
-     @?= ("aa\naa" :: Text)
+ , renderTest "chomp with box at end"
+     Nothing
+     ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
+     "aa\naa"
 
- , testCase "empty and $$" $
-     render Nothing ("aa" $$ empty $$ "bb")
-     @?= ("aa\nbb" :: Text)
+ , renderTest "empty and $$"
+     Nothing
+     ("aa" $$ empty $$ "bb")
+     "aa\nbb"
 
- , testCase "table" $
-     render Nothing ((rblock 4 "aa" <> lblock 3 " | " <> cblock 4 "bb" <>
+ , renderTest "table"
+     Nothing
+     ((rblock 4 "aa" <> lblock 3 " | " <> cblock 4 "bb" <>
                          lblock 3 " | " <> lblock 4 "cc") $$
                      (rblock 4 "----" <> lblock 3 " | " <> cblock 4 "----" <>
                          lblock 3 " | " <> lblock 4 "----") $$
                      (rblock 4 "dd" <> lblock 3 " | " <> cblock 4 "ee" <>
                          lblock 3 " | " <> lblock 4 "ff"))
-     @?= ("  aa |  bb  | cc\n---- | ---- | ----\n  dd |  ee  | ff" :: Text)
+     "  aa |  bb  | cc\n---- | ---- | ----\n  dd |  ee  | ff"
 
- , testCase "proper wrapping with multiple components" $
-     render (Just 10) ("aa" <> space <> "bbbbb" <> "ccccc")
-     @?= ("aa\nbbbbbccccc" :: Text)
+ , renderTest "proper wrapping with multiple components"
+     (Just 10)
+     ("aa" <> space <> "bbbbb" <> "ccccc")
+     "aa\nbbbbbccccc"
 
  , testCase "getDimensions" $
     let foo = "A baosnetuh snaothsn aoesnth aoesnth aosenth sentuhaoeu"
     in getDimensions Nothing (hsep (map text $ words $ foo) <> cr <> "bar")
     @?= Dimensions (length foo) 2
 
- , testCase "nested wrapped text" $
-    render (Just 10) (nest 5 (hsep ["hi", "there", "my", "friend"]) <> cr)
-    @?= ("     hi\n     there\n     my\n     friend" :: Text)
+ , renderTest "nested wrapped text"
+    (Just 10)
+    (nest 5 (hsep ["hi", "there", "my", "friend"]) <> cr)
+    "     hi\n     there\n     my\n     friend"
 
- , testCase "aligned wrapped text" $
-    render Nothing (cblock 7 ("hi" <+> "there"))
-    @?= ("  hi\n there" :: Text)
+ , renderTest "aligned wrapped text"
+    Nothing
+    (cblock 7 ("hi" <+> "there"))
+    "  hi\n there"
 
-  , testCase "afterBreak" $
-      render (Just 2) ("hi" <+> afterBreak "!" <> afterBreak "?" <>
-          "x" <> afterBreak "?")
-      @?= ("hi\n!x" :: Text)
+  , renderTest "afterBreak"
+      (Just 2)
+      ("hi" <+> afterBreak "!" <> afterBreak "?" <> "x" <> afterBreak "?")
+      "hi\n!x"
 
-  , testCase "breaks and nest" $
-      render (Just 5) ("[" <> nest 1 ("aaaaaaaaa" $$ "bbbbbbb") <> "]")
-      @?= ("[aaaaaaaaa\n bbbbbbb]" :: Text)
+  , renderTest "breaks and nest"
+      (Just 5)
+      ("[" <> nest 1 ("aaaaaaaaa" $$ "bbbbbbb") <> "]")
+      "[aaaaaaaaa\n bbbbbbb]"
 
-  , testCase "empty nest" $
-      render Nothing ("aa" $$ nest 3 mempty $$ "bb")
-      @?= ("aa\nbb" :: Text)
+  , renderTest "empty nest"
+      Nothing
+      ("aa" $$ nest 3 mempty $$ "bb")
+      "aa\nbb"
 
-  , testCase "hsep with empty" $
-      render Nothing (hsep ["a",mempty,"b"])
-      @?= ("a b" :: Text)
+  , renderTest "hsep with empty"
+      Nothing
+      (hsep ["a",mempty,"b"])
+      "a b"
 
-   , testCase "(<+>) with empty" $
-      render Nothing ("a" <+> mempty <+> "b")
-      @?= ("a b" :: Text)
+   , renderTest "(<+>) with empty"
+      Nothing
+      ("a" <+> mempty <+> "b")
+      "a b"
 
-  , testCase "vcat doesn't create newline at end" $
-      render Nothing (vcat ["aa","bb"] <> "cc")
-      @?= ("aa\nbbcc" :: Text)
+  , renderTest "vcat doesn't create newline at end"
+      Nothing
+      (vcat ["aa","bb"] <> "cc")
+      "aa\nbbcc"
 
-  , testCase "vcat []" $
-      render Nothing (vcat [])
-      @?= ("" :: Text)
+  , renderTest "vcat []"
+      Nothing
+      (vcat [])
+      ""
 
-  , testCase "nestle" $
-      render Nothing (nestle $ blanklines 2 $$ "aa" $$ blanklines 2 <> cr)
-      @?= ("aa" :: Text)
+  , renderTest "nestle"
+      Nothing
+      (nestle $ blanklines 2 $$ "aa" $$ blanklines 2 <> cr)
+      "aa"
+
+  , renderTest "prefix with box"
+      Nothing
+      (prefixed "> " $ cblock 4 ("aa" $$ "bb"))
+      ">  aa\n>  bb"
   ]
