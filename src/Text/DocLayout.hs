@@ -305,7 +305,7 @@ chomp d =
    isPrintable _ = False
 
 
--- | Remove leading blank lines.
+-- | Remove leading and trailing blank lines.
 nestle :: Doc -> Doc
 nestle d =
   case d of
@@ -313,8 +313,15 @@ nestle d =
     Concat d1 d2 ->
       case nestle d1 of
         Empty -> nestle d2
-        x -> x <> d2
+        x -> x <> nestleEnd d2
     _ -> d
+ where
+   nestleEnd VFill{} = Empty
+   nestleEnd (Concat d1 d2) =
+                 case nestleEnd d2 of
+                   Empty -> nestleEnd d1
+                   x     -> d1 <> x
+   nestleEnd x = x
 
 -- | Align left.
 alignLeft :: Doc -> Doc

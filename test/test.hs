@@ -188,4 +188,8 @@ tests =
   , testCase "vcat []" $
       render Nothing (vcat [])
       @?= ("" :: Text)
+
+  , testCase "nestle" $
+      render Nothing (nestle $ blanklines 2 $$ "aa" $$ blanklines 2 <> cr)
+      @?= ("aa" :: Text)
   ]
