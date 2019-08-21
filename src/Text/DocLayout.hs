@@ -306,7 +306,7 @@ renderList (Prefixed pref d : xs) = do
   put st{ prefix = prefix st <> pref }
   renderDoc d
   modify $ \s -> s{ prefix = oldPref }
-  renderDoc CarriageReturn
+  -- renderDoc CarriageReturn
   renderList xs
 
 renderList (Flush d : xs) = do
@@ -365,7 +365,7 @@ renderList (BlankLines num : xs) = do
 
 renderList (CarriageReturn : xs) = do
   st <- get
-  if newlines st > 0 || null xs
+  if newlines st > 0
      then renderList xs
      else do
        newline
