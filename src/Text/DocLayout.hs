@@ -276,7 +276,7 @@ render linelen doc = mconcat . reverse . output $
                           , newlines = 2 }
 
 renderDoc :: HasChars a => Bool -> Doc a -> DocState a
-renderDoc outer = renderList outer . traceShowId . unfoldD
+renderDoc outer = renderList outer . unfoldD
 
 data IsBlock a = IsBlock Int [a]
 
