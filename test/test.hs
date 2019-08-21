@@ -217,4 +217,9 @@ tests =
       Nothing
       (prefixed "> " $ cblock 4 ("aa" $$ "bb"))
       ">  aa\n>  bb"
+
+  , renderTest "breaking space after empty"
+      Nothing
+      (empty <> space <> "x")
+      "x"
   ]

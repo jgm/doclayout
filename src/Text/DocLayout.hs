@@ -394,10 +394,10 @@ renderList (BreakingSpace : xs) = do
   case lineLength st of
         Just l | column st + 1 + off > l -> do
           newline
-          renderList xs'
-        _  -> do
-          outp 1 " "
-          renderList xs'
+        _  -> if column st > 0
+                 then outp 1 " "
+                 else return ()
+  renderList xs'
 
 renderList (AfterBreak t : xs) = do
   st <- get
