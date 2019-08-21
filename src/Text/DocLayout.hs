@@ -266,7 +266,7 @@ outp off s = do           -- offset >= 0 (0 might be combining char)
 -- @render Nothing@ will not reflow text.
 render :: HasChars a => Maybe Int -> Doc a -> a
 render linelen doc = mconcat . reverse . output $
-  execState (renderDoc True doc) startingState
+  execState (renderDoc doc) startingState
    where startingState = RenderState{
                             output = mempty
                           , prefix = mempty
@@ -275,120 +275,112 @@ render linelen doc = mconcat . reverse . output $
                           , column = 0
                           , newlines = 2 }
 
-renderDoc :: HasChars a => Bool -> Doc a -> DocState a
-renderDoc outer = renderList outer . unfoldD
+renderDoc :: HasChars a => Doc a -> DocState a
+renderDoc = renderList . unfoldD
 
 data IsBlock a = IsBlock Int [a]
 
 -- This would be nicer with a pattern synonym
 -- pattern VBlock i s <- mkIsBlock -> Just (IsBlock ..)
 
-renderList :: HasChars a => Bool -> [Doc a] -> DocState a
-renderList _ [] = return ()
+renderList :: HasChars a => [Doc a] -> DocState a
+renderList [] = return ()
 
-renderList outer (Concat{} : xs) =
-  renderList outer xs -- should not happen after unfoldD
+renderList (Concat{} : xs) = renderList xs -- should not happen after unfoldD
 
-renderList outer (Empty : xs) =
-  renderList outer xs -- should not happen after unfoldD
+renderList (Empty : xs) = renderList xs -- should not happen after unfoldD
 
-renderList True (NewLine : []) = renderList True [CarriageReturn]
+renderList (NewLine : []) = renderList [CarriageReturn]
 
-renderList True (BlankLines _ : []) = renderList True [CarriageReturn]
+renderList (BlankLines _ : []) = renderList [CarriageReturn]
 
-renderList _ (BreakingSpace : []) = return ()
+renderList (BreakingSpace : []) = return ()
 
-renderList outer (Text off s : xs) = do
+renderList (Text off s : xs) = do
   outp off s
-  renderList outer xs
+  renderList xs
 
-renderList outer (Prefixed pref d : xs) = do
+renderList (Prefixed pref d : xs) = do
   st <- get
   let oldPref = prefix st
   put st{ prefix = prefix st <> pref }
-  renderDoc False d
+  renderDoc d
   modify $ \s -> s{ prefix = oldPref }
-  renderList outer xs
+  -- renderDoc CarriageReturn
+  renderList xs
 
-renderList outer (Flush d : xs) = do
+renderList (Flush d : xs) = do
   st <- get
   let oldUsePrefix = usePrefix st
   put st{ usePrefix = False }
-  renderDoc False d
+  renderDoc d
   modify $ \s -> s{ usePrefix = oldUsePrefix }
-  renderList outer xs
+  renderList xs
 
-renderList outer (BeforeNonBlank d : xs) =
+renderList (BeforeNonBlank d : xs) =
   case xs of
-    (x:_) | isBlank x -> renderList outer xs
-          | otherwise -> renderDoc False d >> renderList outer xs
-    []                -> renderList outer xs
+    (x:_) | isBlank x -> renderList xs
+          | otherwise -> renderDoc d >> renderList xs
+    []                -> renderList xs
 
-renderList outer (BlankLines m : BlankLines n : xs) =
-  renderList outer (BlankLines (max m n) : xs)
+renderList (BlankLines m : BlankLines n : xs) =
+  renderList (BlankLines (max m n) : xs)
 
-renderList outer (BlankLines num : BreakingSpace : xs) =
-  renderList outer (BlankLines num : xs)
+renderList (BlankLines num : BreakingSpace : xs) =
+  renderList (BlankLines num : xs)
 
-renderList outer (BlankLines m : CarriageReturn : xs) =
-  renderList outer (BlankLines m : xs)
+renderList (BlankLines m : CarriageReturn : xs) =
+  renderList (BlankLines m : xs)
 
-renderList outer (BlankLines m : NewLine : xs) =
-  renderList outer (BlankLines m : xs)
+renderList (BlankLines m : NewLine : xs) =
+  renderList (BlankLines m : xs)
 
-renderList outer (NewLine : BlankLines m : xs) =
-  renderList outer (BlankLines m : xs)
+renderList (NewLine : BlankLines m : xs) =
+  renderList (BlankLines m : xs)
 
-renderList outer (NewLine : BreakingSpace : xs) =
-  renderList outer (NewLine : xs)
+renderList (NewLine : BreakingSpace : xs) =
+  renderList (NewLine : xs)
 
-renderList outer (NewLine : CarriageReturn : xs) =
-  renderList outer (NewLine : xs)
+renderList (NewLine : CarriageReturn : xs) =
+  renderList (NewLine : xs)
 
-renderList outer (CarriageReturn : CarriageReturn : xs) =
-  renderList outer (CarriageReturn : xs)
+renderList (CarriageReturn : CarriageReturn : xs) =
+  renderList (CarriageReturn : xs)
 
-renderList outer (CarriageReturn : NewLine : xs) =
-  renderList outer (NewLine : xs)
+renderList (CarriageReturn : NewLine : xs) =
+  renderList (NewLine : xs)
 
-renderList outer (CarriageReturn : BlankLines m : xs) =
-  renderList outer (BlankLines m : xs)
+renderList (CarriageReturn : BlankLines m : xs) =
+  renderList (BlankLines m : xs)
 
-renderList outer (CarriageReturn : BreakingSpace : xs) =
-  renderList outer (CarriageReturn : xs)
+renderList (CarriageReturn : BreakingSpace : xs) =
+  renderList (CarriageReturn : xs)
 
-renderList outer (BlankLines num : xs) = do
+renderList (BlankLines num : xs) = do
   st <- get
   case output st of
      _ | newlines st > num -> return ()
        | otherwise -> replicateM_ (1 + num - newlines st) newline
-  renderList outer xs
+  renderList xs
 
-renderList outer (CarriageReturn : xs) = do
+renderList (CarriageReturn : xs) = do
   st <- get
   if newlines st > 0
-     then renderList outer xs
+     then renderList xs
      else do
        newline
-       renderList outer xs
+       renderList xs
 
-renderList outer (NewLine : xs) = do
+renderList (NewLine : xs) = do
   newline
-  renderList outer xs
+  renderList xs
 
-renderList outer (BreakingSpace : CarriageReturn : xs) =
-  renderList outer (CarriageReturn:xs)
-
-renderList outer (BreakingSpace : NewLine : xs) =
-  renderList outer (NewLine:xs)
-
-renderList outer (BreakingSpace : BlankLines n : xs) =
-  renderList outer (BlankLines n:xs)
-
-renderList outer (BreakingSpace : BreakingSpace : xs) =
-  renderList outer (BreakingSpace:xs)
-
-renderList outer (BreakingSpace : xs) = do
+renderList (BreakingSpace : CarriageReturn : xs) =
+  renderList (CarriageReturn:xs)
+renderList (BreakingSpace : NewLine : xs) = renderList (NewLine:xs)
+renderList (BreakingSpace : BlankLines n : xs) = renderList (BlankLines n:xs)
+renderList (BreakingSpace : BreakingSpace : xs) = renderList (BreakingSpace:xs)
+renderList (BreakingSpace : xs) = do
   let isText (Text _ _)     = True
       isText (Block _ _)    = True
       isText (AfterBreak _) = True
@@ -402,32 +394,32 @@ renderList outer (BreakingSpace : xs) = do
   case lineLength st of
         Just l | column st + 1 + off > l -> do
           newline
-          renderList outer xs'
+          renderList xs'
         _  -> do
           outp 1 " "
-          renderList outer xs'
+          renderList xs'
 
-renderList outer (AfterBreak t : xs) = do
+renderList (AfterBreak t : xs) = do
   st <- get
   if newlines st > 0
-     then renderList outer (fromString (T.unpack t) : xs)
-     else renderList outer xs
+     then renderList (fromString (T.unpack t) : xs)
+     else renderList xs
 
-renderList outer (Block i1 s1 : Block i2 s2  : xs) =
-  renderList outer (mergeBlocks False (IsBlock i1 s1) (IsBlock i2 s2) : xs)
+renderList (Block i1 s1 : Block i2 s2  : xs) =
+  renderList (mergeBlocks False (IsBlock i1 s1) (IsBlock i2 s2) : xs)
 
-renderList outer (Block i1 s1 : BreakingSpace : Block i2 s2 : xs) =
-  renderList outer (mergeBlocks True (IsBlock i1 s1) (IsBlock i2 s2) : xs)
+renderList (Block i1 s1 : BreakingSpace : Block i2 s2 : xs) =
+  renderList (mergeBlocks True (IsBlock i1 s1) (IsBlock i2 s2) : xs)
 
-renderList outer (Block _width lns : xs) = do
+renderList (Block _width lns : xs) = do
   st <- get
   let oldPref = prefix st
   case column st - realLength oldPref of
         n | n > 0 -> modify $ \s -> s{ prefix = oldPref <> T.replicate n " " }
         _ -> return ()
-  renderList outer $ intersperse CarriageReturn (map (Text 0) lns)
+  renderList $ intersperse CarriageReturn (map (Text 0) lns)
   modify $ \s -> s{ prefix = oldPref }
-  renderList outer xs
+  renderList xs
 
 mergeBlocks :: HasChars a => Bool -> IsBlock a -> IsBlock a -> Doc a
 mergeBlocks addSpace (IsBlock w1 lns1) (IsBlock w2 lns2) =

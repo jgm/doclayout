@@ -101,7 +101,7 @@ tests =
  , renderTest "blanks at end with nesting"
      Nothing
      (nest 2 (nest 3 ("aa" <> blankline) <> cr <> blanklines 2) <> blanklines 2)
-     "     aa\n\n\n"
+     "     aa\n"
 
  , renderTest "blanks around cr"
      Nothing
