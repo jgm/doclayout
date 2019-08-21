@@ -39,7 +39,7 @@ tests =
   , renderTest "x $$ cr"
       Nothing
       ("x" $$ cr)
-      "x"
+      "x\n"
 
  , renderTest "wrapping"
      (Just 10)
@@ -49,7 +49,7 @@ tests =
  , renderTest "simple box wrapping"
      (Just 50)
      (lblock 3 "aa" <> lblock 3 "bb" <> lblock 3 ("aa" <+> "bbbb"))
-     "aa bb aa\n      bbb"
+     "aa bb aa\n      b\n      bbb"
 
  , renderTest "prefixed with multi paragraphs"
      (Just 80)
@@ -62,16 +62,6 @@ tests =
      (prefixed "> " $ hsep ["a","b","c"])
      "> a b c"
 
- , renderTest "breaking space before empty box"
-     Nothing
-     ("a" <> space <> lblock 3 mempty)
-     "a"
-
--- , renderTest "centered"
---     (Just 10)
---     (alignCenter "hi\nlow")
---     "    hi\n   low"
-
  , renderTest "nest"
      Nothing
      (nest 4 "aa\n\nbb\ncc")
@@ -81,42 +71,37 @@ tests =
      Nothing
      (hang 4 "  - " (chomp "aa\n\nbb\ncc" <> cr) <>
                      hang 4 "  - " (chomp "dd\n" <> cr))
-     "  - aa\n\n    bb\n    cc\n  - dd"
+     "  - aa\n\n    bb\n    cc\n  - dd\n"
 
  , renderTest "align with box"
      Nothing
      ("aa" <> lblock 2 ("bb" $$ "cc") <> "dd")
      "aabbdd\n  cc"
 
--- , renderTest "centered box"
---     Nothing
---     ("aa" <> box 4 (alignCenter $ "bb" $$ "cc") <> "dd")
---     "aa bb dd\n   cc"
+ , renderTest "centered box"
+     Nothing
+     ("aa" <> cblock 4 ("bb" $$ "cc") <> "dd")
+     "aa bb dd\n   cc"
 
  , renderTest "blanks at beginning"
      Nothing
      (blanklines 2 <> "aa")
-     "aa"
+     "\n\naa"
 
  , renderTest "blanks at end"
      Nothing
      ("aa" <> blanklines 2)
-     "aa"
+     "aa\n"
 
  , renderTest "blanks at end with multiple"
      Nothing
      ("aa" <> cr <> blanklines 2 <> blanklines 0)
-     "aa"
+     "aa\n"
 
  , renderTest "blanks at end with nesting"
      Nothing
      (nest 2 (nest 3 ("aa" <> blankline) <> cr <> blanklines 2) <> blanklines 2)
-     "     aa"
-
--- , renderTest "blanks at end with alignment"
---     Nothing
---     (alignLeft ("aa" <> blankline) <> cr <> blankline)
---     "aa"
+     "     aa\n"
 
  , renderTest "blanks around cr"
      Nothing
@@ -150,8 +135,8 @@ tests =
 
  , renderTest "chomp with nesting"
      Nothing
-     (chomp (nest 3 ("aa" <> blankline)) <> "bb")
-     "   aabb"
+     (chomp (nest 3 ("aa" <> blankline)))
+     "   aa"
 
  , renderTest "chomp with box at end"
      Nothing
@@ -178,15 +163,10 @@ tests =
      ("aa" <> space <> "bbbbb" <> "ccccc")
      "aa\nbbbbbccccc"
 
--- , testCase "getDimensions" $
---    let foo = "A baosnetuh snaothsn aoesnth aoesnth aosenth sentuhaoeu"
---    in getDimensions Nothing (hsep (map text $ words $ foo) <> cr <> "bar")
---    @?= Dimensions (length foo) 2
-
  , renderTest "nested wrapped text"
     (Just 10)
     (nest 5 (hsep ["hi", "there", "my", "friend"]) <> cr)
-    "     hi\n     there\n     my\n     friend"
+    "     hi\n     there\n     my\n     friend\n"
 
  , renderTest "aligned wrapped text"
     Nothing
@@ -231,7 +211,7 @@ tests =
   , renderTest "nestle"
       Nothing
       (nestle $ blanklines 2 $$ "aa" $$ blanklines 2 <> cr)
-      "aa"
+      "aa\n"
 
   , renderTest "prefix with box"
       Nothing
