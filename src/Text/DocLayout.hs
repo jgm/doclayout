@@ -367,10 +367,12 @@ renderList (CarriageReturn : xs) = do
      then renderList xs
      else do
        outp (-1) "\n"
+       modify $ \st' -> st'{ newlines = newlines st' + 1 }
        renderList xs
 
 renderList (NewLine : xs) = do
   outp (-1) "\n"
+  modify $ \st' -> st'{ newlines = newlines st' + 1 }
   renderList xs
 
 renderList (BreakingSpace : CarriageReturn : xs) =
