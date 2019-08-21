@@ -76,10 +76,11 @@ import Data.String
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Text.DocTemplates as DT
+import Debug.Trace
 
 -- | Class abstracting over various string types that
 -- can fold over characters.
-class (IsString a, Monoid a) => HasChars a where
+class (IsString a, Monoid a, Show a) => HasChars a where
   foldrChar     :: (Char -> b -> b) -> b -> a -> b
   splitLines    :: a -> [a]
   replicateChar :: Int -> Char -> a
@@ -272,7 +273,7 @@ render linelen doc = mconcat . reverse . output $
                           , newlines = 2 }
 
 renderDoc :: HasChars a => Doc a -> DocState a
-renderDoc = renderList . unfoldD
+renderDoc = renderList . traceShowId . unfoldD
 
 data IsBlock a = IsBlock Int [a]
 
@@ -286,13 +287,11 @@ renderList (Concat{} : xs) = renderList xs -- should not happen after unfoldD
 
 renderList (Empty : xs) = renderList xs -- should not happen after unfoldD
 
-renderList (NewLine : []) = return ()
+renderList (NewLine : []) = renderList [CarriageReturn]
 
-renderList (BlankLines _ : []) = return ()
+renderList (BlankLines _ : []) = renderList [CarriageReturn]
 
 renderList (BreakingSpace : []) = return ()
-
-renderList (CarriageReturn : []) = return ()
 
 renderList (Text off s : xs) = do
   outp off s
