@@ -341,6 +341,9 @@ renderList (NewLine : BreakingSpace : xs) =
 renderList (NewLine : CarriageReturn : xs) =
   renderList (NewLine : xs)
 
+renderList (CarriageReturn : CarriageReturn : xs) =
+  renderList (CarriageReturn : xs)
+
 renderList (CarriageReturn : NewLine : xs) =
   renderList (NewLine : xs)
 
