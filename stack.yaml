@@ -1,7 +1,9 @@
 resolver: lts-13.17
 packages:
 - '.'
-extra-deps: []
+extra-deps:
+- git: https://github.com/jgm/doctemplates
+  commit: 9d25d6cdc6a32dfc76d8fc0048c91001b5aed108
 flags: {}
 extra-package-dbs: []
 ghc-options:

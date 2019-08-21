@@ -9,7 +9,7 @@ import Data.Text (Text)
 main :: IO ()
 main = defaultMain $ testGroup "Tests" tests
 
-renderTest :: String -> Maybe Int -> Doc -> Text -> TestTree
+renderTest :: String -> Maybe Int -> Doc Text -> Text -> TestTree
 renderTest title mblen doc expected =
   testCase title $ render mblen doc @?= expected
 
@@ -48,7 +48,7 @@ tests =
 
  , renderTest "simple box wrapping"
      (Just 50)
-     (box 3 "aa" <> box 3 "bb" <> box 3 ("aa" <+> "bbbb"))
+     (lblock 3 "aa" <> lblock 3 "bb" <> lblock 3 ("aa" <+> "bbbb"))
      "aa bb aa\n      bbb"
 
  , renderTest "prefixed with multi paragraphs"
@@ -64,7 +64,7 @@ tests =
 
  , renderTest "breaking space before empty box"
      Nothing
-     ("a" <> space <> box 3 mempty)
+     ("a" <> space <> lblock 3 mempty)
      "a"
 
 -- , renderTest "centered"
@@ -83,14 +83,9 @@ tests =
                      hang 4 "  - " (chomp "dd\n" <> cr))
      "  - aa\n\n    bb\n    cc\n  - dd"
 
- , renderTest "aligned"
-     Nothing
-     ("aa" <> aligned ("bb" $$ "cc") <> "dd")
-     "aabb\n  ccdd"
-
  , renderTest "align with box"
      Nothing
-     ("aa" <> box 2 ("bb" $$ "cc") <> "dd")
+     ("aa" <> lblock 2 ("bb" $$ "cc") <> "dd")
      "aabbdd\n  cc"
 
 -- , renderTest "centered box"
@@ -160,7 +155,7 @@ tests =
 
  , renderTest "chomp with box at end"
      Nothing
-     ("aa" <> cr <> chomp (box 2 ("aa" <> blankline) <> blankline))
+     ("aa" <> cr <> chomp (lblock 2 ("aa" <> blankline) <> blankline))
      "aa\naa"
 
  , renderTest "empty and $$"
