@@ -301,8 +301,8 @@ renderList (Prefixed pref d : xs) = do
   st <- get
   let oldPref = prefix st
   put st{ prefix = prefix st <> pref }
-  renderDoc (d <> CarriageReturn)
   modify $ \s -> s{ prefix = oldPref }
+  renderDoc CarriageReturn
   renderList xs
 
 renderList (Flush d : xs) = do
