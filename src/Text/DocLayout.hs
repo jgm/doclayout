@@ -237,17 +237,20 @@ data RenderState a = RenderState{
        , newlines   :: Int        -- ^ Number of preceding newlines
        }
 
-outp :: HasChars a => Int -> a -> DocState a
-outp off s | off < 0 = do  -- offset < 0 means newline characters
+newline :: HasChars a => DocState a
+newline = do
   st' <- get
   let rawpref = prefix st'
   when (column st' == 0 && usePrefix st' && not (T.null rawpref)) $ do
-    let pref = fromString $ T.unpack $ T.dropWhileEnd isSpace rawpref
-    modify $ \st -> st{ output = pref : output st
-                      , column = column st + realLength pref }
-  modify $ \st -> st { output = s : output st
+     let pref = fromString $ T.unpack $ T.dropWhileEnd isSpace rawpref
+     modify $ \st -> st{ output = pref : output st
+                       , column = column st + realLength pref }
+  modify $ \st -> st { output = "\n" : output st
                      , column = 0
+                     , newlines = newlines st + 1
                      }
+
+outp :: HasChars a => Int -> a -> DocState a
 outp off s = do           -- offset >= 0 (0 might be combining char)
   st' <- get
   let pref = fromString $ T.unpack $ prefix st'
@@ -357,9 +360,7 @@ renderList (BlankLines num : xs) = do
   st <- get
   case output st of
      _ | newlines st > num -> return ()
-       | otherwise -> replicateM_ (1 + num - newlines st)
-                        (do outp (-1) "\n"
-                            modify $ \st' -> st'{ newlines = newlines st' + 1 })
+       | otherwise -> replicateM_ (1 + num - newlines st) newline
   renderList xs
 
 renderList (CarriageReturn : xs) = do
@@ -367,13 +368,11 @@ renderList (CarriageReturn : xs) = do
   if newlines st > 0 || null xs
      then renderList xs
      else do
-       outp (-1) "\n"
-       modify $ \st' -> st'{ newlines = newlines st' + 1 }
+       newline
        renderList xs
 
 renderList (NewLine : xs) = do
-  outp (-1) "\n"
-  modify $ \st' -> st'{ newlines = newlines st' + 1 }
+  newline
   renderList xs
 
 renderList (BreakingSpace : CarriageReturn : xs) =
@@ -394,7 +393,7 @@ renderList (BreakingSpace : xs) = do
   let off = foldl' (+) 0 $ map offsetOf next
   case lineLength st of
         Just l | column st + 1 + off > l -> do
-          outp (-1) "\n"
+          newline
           renderList xs'
         _  -> do
           outp 1 " "
