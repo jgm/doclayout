@@ -75,7 +75,6 @@ import Data.List (intersperse, foldl')
 import Data.String
 import qualified Data.Text as T
 import Data.Text (Text)
-import qualified Text.DocTemplates as DT
 
 -- | Class abstracting over various string types that
 -- can fold over characters.
@@ -122,12 +121,6 @@ instance Monoid (Doc a) where
 
 instance IsString a => IsString (Doc a) where
   fromString = text
-
-instance IsString a => DT.TemplateTarget (Doc a) where
-  fromText = text . T.unpack
-  removeFinalNewline = chomp
-  nested = nest
-  isEmpty = isEmpty
 
 unfoldD :: Doc a -> [Doc a]
 unfoldD Empty = []
