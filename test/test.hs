@@ -86,7 +86,7 @@ tests =
  , renderTest "blanks at beginning"
      Nothing
      (blanklines 2 <> "aa")
-     "aa"
+     "\naa"  -- only one because we treat top of doc as implicit blank
 
  , renderTest "blanks at end"
      Nothing
