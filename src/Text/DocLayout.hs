@@ -504,9 +504,7 @@ nest ind = prefixed (replicate ind ' ')
 -- then @doc@, leaving an indent of @ind@ spaces on every
 -- line but the first.
 hang :: IsString a => Int -> Doc a -> Doc a -> Doc a
-hang ind start doc
-  | isEmpty doc = Empty
-  | otherwise   = start <> nest ind doc
+hang ind start doc = start <> nest ind doc
 
 -- | @beforeNonBlank d@ conditionally includes @d@ unless it is
 -- followed by blank space.
