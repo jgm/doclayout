@@ -266,25 +266,69 @@ render linelen doc = mconcat . reverse . output $
                           , newlines = 2 }
 
 renderDoc :: HasChars a => Doc a -> DocState a
-renderDoc = renderList . unfoldD
+renderDoc = renderList . normalize . unfoldD
+
+
+normalize :: HasChars a => [Doc a] -> [Doc a]
+normalize [] = []
+normalize (Concat{} : xs) = normalize xs -- should not happen after unfoldD
+normalize (Empty : xs) = normalize xs -- should not happen after unfoldD
+normalize [NewLine] = normalize [CarriageReturn]
+normalize [BlankLines _] = normalize [CarriageReturn]
+normalize [BreakingSpace] = []
+normalize (BlankLines m : BlankLines n : xs) =
+  normalize (BlankLines (max m n) : xs)
+normalize (BlankLines num : BreakingSpace : xs) =
+  normalize (BlankLines num : xs)
+normalize (BlankLines m : CarriageReturn : xs) = normalize (BlankLines m : xs)
+normalize (BlankLines m : NewLine : xs) = normalize (BlankLines m : xs)
+normalize (NewLine : BlankLines m : xs) = normalize (BlankLines m : xs)
+normalize (NewLine : BreakingSpace : xs) = normalize (NewLine : xs)
+normalize (NewLine : CarriageReturn : xs) = normalize (NewLine : xs)
+normalize (CarriageReturn : CarriageReturn : xs) =
+  normalize (CarriageReturn : xs)
+normalize (CarriageReturn : NewLine : xs) = normalize (NewLine : xs)
+normalize (CarriageReturn : BlankLines m : xs) = normalize (BlankLines m : xs)
+normalize (CarriageReturn : BreakingSpace : xs) =
+  normalize (CarriageReturn : xs)
+normalize (BreakingSpace : CarriageReturn : xs) =
+  normalize (CarriageReturn:xs)
+normalize (BreakingSpace : NewLine : xs) = normalize (NewLine:xs)
+normalize (BreakingSpace : BlankLines n : xs) = normalize (BlankLines n:xs)
+normalize (BreakingSpace : BreakingSpace : xs) = normalize (BreakingSpace:xs)
+normalize (Block i1 s1 : Block i2 s2  : xs) =
+  normalize (mergeBlocks False (IsBlock i1 s1) (IsBlock i2 s2) : xs)
+normalize (Block i1 s1 : Text n t : xs) =
+  normalize (mergeBlocks False (IsBlock i1 s1) (IsBlock n [t]) : xs)
+normalize (Block i1 s1 : BreakingSpace : Block i2 s2 : xs) =
+  normalize (mergeBlocks True (IsBlock i1 s1) (IsBlock i2 s2) : xs)
+normalize (Block i1 s1 : BreakingSpace : Text n t : xs) =
+  normalize (mergeBlocks True (IsBlock i1 s1) (IsBlock n [t]) : xs)
+normalize (x:xs) = x : normalize xs
 
 data IsBlock a = IsBlock Int [a]
-
 -- This would be nicer with a pattern synonym
 -- pattern VBlock i s <- mkIsBlock -> Just (IsBlock ..)
 
+mergeBlocks :: HasChars a => Bool -> IsBlock a -> IsBlock a -> Doc a
+mergeBlocks addSpace (IsBlock w1 lns1) (IsBlock w2 lns2) =
+  Block (w1 + w2 + if addSpace then 1 else 0) $
+     zipWith (\l1 l2 -> pad w1 l1 <> l2) lns1' (map sp lns2')
+    where (lns1', lns2') = case (length lns1, length lns2) of
+                                (x, y) | x > y -> (lns1,
+                                                   lns2 ++ replicate (x - y)
+                                                            mempty)
+                                       | x < y -> (lns1 ++ replicate (y - x)
+                                                            mempty ,
+                                                   lns2)
+                                       | otherwise -> (lns1, lns2)
+          pad n s = s <> replicateChar (n - realLength s) ' '
+          sp xs = if addSpace && realLength xs > 0
+                     then " " <> xs
+                     else xs
+
 renderList :: HasChars a => [Doc a] -> DocState a
 renderList [] = return ()
-
-renderList (Concat{} : xs) = renderList xs -- should not happen after unfoldD
-
-renderList (Empty : xs) = renderList xs -- should not happen after unfoldD
-
-renderList [NewLine] = renderList [CarriageReturn]
-
-renderList [BlankLines _] = renderList [CarriageReturn]
-
-renderList [BreakingSpace] = return ()
 
 renderList (Text off s : xs) = do
   outp off s
@@ -324,39 +368,6 @@ renderList (BeforeNonBlank d : xs) =
    isBlank _              = False
 
 
-renderList (BlankLines m : BlankLines n : xs) =
-  renderList (BlankLines (max m n) : xs)
-
-renderList (BlankLines num : BreakingSpace : xs) =
-  renderList (BlankLines num : xs)
-
-renderList (BlankLines m : CarriageReturn : xs) =
-  renderList (BlankLines m : xs)
-
-renderList (BlankLines m : NewLine : xs) =
-  renderList (BlankLines m : xs)
-
-renderList (NewLine : BlankLines m : xs) =
-  renderList (BlankLines m : xs)
-
-renderList (NewLine : BreakingSpace : xs) =
-  renderList (NewLine : xs)
-
-renderList (NewLine : CarriageReturn : xs) =
-  renderList (NewLine : xs)
-
-renderList (CarriageReturn : CarriageReturn : xs) =
-  renderList (CarriageReturn : xs)
-
-renderList (CarriageReturn : NewLine : xs) =
-  renderList (NewLine : xs)
-
-renderList (CarriageReturn : BlankLines m : xs) =
-  renderList (BlankLines m : xs)
-
-renderList (CarriageReturn : BreakingSpace : xs) =
-  renderList (CarriageReturn : xs)
-
 renderList (BlankLines num : xs) = do
   st <- get
   case output st of
@@ -376,11 +387,6 @@ renderList (NewLine : xs) = do
   newline
   renderList xs
 
-renderList (BreakingSpace : CarriageReturn : xs) =
-  renderList (CarriageReturn:xs)
-renderList (BreakingSpace : NewLine : xs) = renderList (NewLine:xs)
-renderList (BreakingSpace : BlankLines n : xs) = renderList (BlankLines n:xs)
-renderList (BreakingSpace : BreakingSpace : xs) = renderList (BreakingSpace:xs)
 renderList (BreakingSpace : xs) = do
   let isText (Text _ _)     = True
       isText (Block _ _)    = True
@@ -403,18 +409,6 @@ renderList (AfterBreak t : xs) = do
      then renderList (fromString (T.unpack t) : xs)
      else renderList xs
 
-renderList (Block i1 s1 : Block i2 s2  : xs) =
-  renderList (mergeBlocks False (IsBlock i1 s1) (IsBlock i2 s2) : xs)
-
-renderList (Block i1 s1 : Text n t : xs) =
-  renderList (mergeBlocks False (IsBlock i1 s1) (IsBlock n [t]) : xs)
-
-renderList (Block i1 s1 : BreakingSpace : Block i2 s2 : xs) =
-  renderList (mergeBlocks True (IsBlock i1 s1) (IsBlock i2 s2) : xs)
-
-renderList (Block i1 s1 : BreakingSpace : Text n t : xs) =
-  renderList (mergeBlocks True (IsBlock i1 s1) (IsBlock n [t]) : xs)
-
 renderList (Block _width lns : xs) = do
   st <- get
   let oldPref = prefix st
@@ -425,22 +419,11 @@ renderList (Block _width lns : xs) = do
   modify $ \s -> s{ prefix = oldPref }
   renderList xs
 
-mergeBlocks :: HasChars a => Bool -> IsBlock a -> IsBlock a -> Doc a
-mergeBlocks addSpace (IsBlock w1 lns1) (IsBlock w2 lns2) =
-  Block (w1 + w2 + if addSpace then 1 else 0) $
-     zipWith (\l1 l2 -> pad w1 l1 <> l2) lns1' (map sp lns2')
-    where (lns1', lns2') = case (length lns1, length lns2) of
-                                (x, y) | x > y -> (lns1,
-                                                   lns2 ++ replicate (x - y)
-                                                            mempty)
-                                       | x < y -> (lns1 ++ replicate (y - x)
-                                                            mempty ,
-                                                   lns2)
-                                       | otherwise -> (lns1, lns2)
-          pad n s = s <> replicateChar (n - realLength s) ' '
-          sp xs = if addSpace && realLength xs > 0
-                     then " " <> xs
-                     else xs
+renderList (Concat{} : _) = error "renderList encountered Concat"
+-- should be weeded out by unfoldD and normalize
+
+renderList (Empty{} : _) = error "renderList encountered Empty"
+-- should be weeded out by unfoldD and normalize
 
 offsetOf :: Doc a -> Int
 offsetOf (Text o _)    = o
