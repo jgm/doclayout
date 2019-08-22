@@ -222,4 +222,9 @@ tests =
       Nothing
       (empty <> space <> "x")
       "x"
+
+  , renderTest "hang with empty content"
+      Nothing
+      (hang 5 (nowrap "xxx") mempty)
+      "xxx"
   ]
