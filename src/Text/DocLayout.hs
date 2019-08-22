@@ -407,8 +407,14 @@ renderList (AfterBreak t : xs) = do
 renderList (Block i1 s1 : Block i2 s2  : xs) =
   renderList (mergeBlocks False (IsBlock i1 s1) (IsBlock i2 s2) : xs)
 
+renderList (Block i1 s1 : Text n t : xs) =
+  renderList (mergeBlocks False (IsBlock i1 s1) (IsBlock n [t]) : xs)
+
 renderList (Block i1 s1 : BreakingSpace : Block i2 s2 : xs) =
   renderList (mergeBlocks True (IsBlock i1 s1) (IsBlock i2 s2) : xs)
+
+renderList (Block i1 s1 : BreakingSpace : Text n t : xs) =
+  renderList (mergeBlocks True (IsBlock i1 s1) (IsBlock n [t]) : xs)
 
 renderList (Block _width lns : xs) = do
   st <- get
