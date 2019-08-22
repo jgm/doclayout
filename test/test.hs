@@ -76,12 +76,12 @@ tests =
  , renderTest "align with box"
      Nothing
      ("aa" <> lblock 2 ("bb" $$ "cc") <> "dd")
-     "aabbdd\n  cc"
+     "aabb\n  ccdd"
 
  , renderTest "centered box"
      Nothing
-     ("aa" <> cblock 4 ("bb" $$ "cc") <> "dd")
-     "aa bb dd\n   cc "
+     ("aa" <> cblock 4 ("bb" $$ "cc"))
+     "aa bb\n   cc"
 
  , renderTest "blanks at beginning"
      Nothing
@@ -236,13 +236,13 @@ tests =
 
   , renderTest "vfill"
       Nothing
-      (vfill "|" <> cblock 5 ("a" $$ "bbb" $$ "ccccc") <> lblock 2 "dd" <+>
-          vfill "+")
-      "|  a  dd +\n| bbb    +\n|ccccc   +"
+      (vfill ["|"] <> cblock 5 ("a" $$ "bbb" $$ "ccccc") <> lblock 3 "dd" <>
+          vfill ["+","|"])
+      "|  a  dd +\n| bbb    |\n|ccccc   +"
 
   , renderTest "vfill 2"
       Nothing
-      (vfill "| " <> cblock 5 ("a" $$ "bbb") <> vfill " | " <>
-          lblock 2 ("dd" $$ "ee" $$ "ff") <> vfill " |")
+      (vfill ["| "] <> cblock 5 ("a" $$ "bbb") <> vfill [" | "] <>
+          lblock 2 ("dd" $$ "ee" $$ "ff") <> vfill [" |"])
       "|   a   | dd |\n|  bbb  | ee |\n|       | ff |"
   ]

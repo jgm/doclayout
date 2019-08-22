@@ -105,6 +105,7 @@ instance HasChars TL.Text where
 
 data Doc a = Text Int a
          | Block (Int, Int) [a]  -- ^ (width, height)
+         | VFill Int [a]
          | Prefixed Text (Doc a)
          | BeforeNonBlank (Doc a)
          | Flush (Doc a)
@@ -297,38 +298,22 @@ normalize (BreakingSpace : CarriageReturn : xs) =
 normalize (BreakingSpace : NewLine : xs) = normalize (NewLine:xs)
 normalize (BreakingSpace : BlankLines n : xs) = normalize (BlankLines n:xs)
 normalize (BreakingSpace : BreakingSpace : xs) = normalize (BreakingSpace:xs)
-normalize (Block i1 s1 : Block i2 s2  : xs) =
-  normalize (mergeBlocks False (IsBlock i1 s1) (IsBlock i2 s2) : xs)
-normalize (Block i1 s1 : Text n t : xs) =
-  normalize (mergeBlocks False (IsBlock i1 s1) (IsBlock (n,1) [t]) : xs)
-normalize (Block i1 s1 : BreakingSpace : Block i2 s2 : xs) =
-  normalize (mergeBlocks True (IsBlock i1 s1) (IsBlock i2 s2) : xs)
-normalize (Block i1 s1 : BreakingSpace : Text n t : xs) =
-  normalize (mergeBlocks True (IsBlock i1 s1) (IsBlock (n,1) [t]) : xs)
 normalize (x:xs) = x : normalize xs
 
-data IsBlock a = IsBlock (Int, Int) [a]
--- This would be nicer with a pattern synonym
--- pattern VBlock i s <- mkIsBlock -> Just (IsBlock ..)
-
-mergeBlocks :: HasChars a => Bool -> IsBlock a -> IsBlock a -> Doc a
-mergeBlocks addSpace (IsBlock (w1,h1) lns1) (IsBlock (w2,h2) lns2) =
-  Block (w, h) $ zipWith (\l1 l2 -> pad w1 l1 <> l2) lns1' (map sp lns2')
-    where
-      w  = w1 + w2 + if addSpace then 1 else 0
-      h  = max h1 h2
-      len1 = length $ take h lns1  -- note lns1 might be infinite
-      len2 = length $ take h lns2
-      lns1' = if len1 < h
-                 then lns1 ++ replicate (h - len1) mempty
-                 else lns1
-      lns2' = if len2 < h
-                 then lns2 ++ replicate (h - len2) mempty
-                 else lns2
-      pad n s = s <> replicateChar (n - realLength s) ' '
-      sp xs = if addSpace && realLength xs > 0
-                 then " " <> xs
-                 else xs
+mergeBlocks :: HasChars a => Int -> (Int, [a]) -> (Int, [a]) -> (Int, [a])
+mergeBlocks h (w1,lns1) (w2,lns2) =
+  (w, zipWith (\l1 l2 -> pad w1 l1 <> l2) lns1' lns2')
+ where
+  w  = w1 + w2
+  len1 = length $ take h lns1  -- note lns1 might be infinite
+  len2 = length $ take h lns2
+  lns1' = if len1 < h
+             then lns1 ++ replicate (h - len1) mempty
+             else take h lns1
+  lns2' = if len2 < h
+             then lns2 ++ replicate (h - len2) mempty
+             else take h lns2
+  pad n s = s <> replicateChar (n - realLength s) ' '
 
 renderList :: HasChars a => [Doc a] -> DocState a
 renderList [] = return ()
@@ -412,25 +397,37 @@ renderList (AfterBreak t : xs) = do
      then renderList (fromString (T.unpack t) : xs)
      else renderList xs
 
-renderList (Block _width lns : xs) = do
+renderList (b : xs) | isBlock b = do
+  let (bs, rest) = span isBlock xs
+  -- ensure we have right padding unless end of line
+  let heightOf (Block (_,x) _) = x
+      heightOf _               = 1
+  let maxheight = maximum $ map heightOf (b:bs)
+  let toBlockSpec (Block (w,_) ls) = (w, ls)
+      toBlockSpec (VFill w ls)     = (w, take maxheight $ cycle ls)
+      toBlockSpec _                = (0, [])
+  let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
+                             (map toBlockSpec bs)
   st <- get
   let oldPref = prefix st
   case column st - realLength oldPref of
         n | n > 0 -> modify $ \s -> s{ prefix = oldPref <> T.replicate n " " }
         _ -> return ()
-  renderList $ intersperse CarriageReturn (map (Text 0) lns)
+  renderList $ intersperse CarriageReturn (map (Text 0) lns')
   modify $ \s -> s{ prefix = oldPref }
-  renderList xs
+  renderList rest
 
-renderList (Concat{} : _) = error "renderList encountered Concat"
--- should be weeded out by unfoldD and normalize
+renderList (x:_) = error $ "renderList encountered " ++ show x
 
-renderList (Empty{} : _) = error "renderList encountered Empty"
--- should be weeded out by unfoldD and normalize
+isBlock :: Doc a -> Bool
+isBlock Block{} = True
+isBlock VFill{} = True
+isBlock _       = False
 
 offsetOf :: Doc a -> Int
 offsetOf (Text o _)      = o
 offsetOf (Block (w,_) _) = w
+offsetOf (VFill w _)     = w
 offsetOf BreakingSpace   = 1
 offsetOf _               = 0
 
@@ -540,9 +537,10 @@ block filler width d
        ls = map filler $ chop width $ render (Just width) d
 
 -- | An expandable border that, when placed next to a box,
--- expands to the height of the box.
-vfill :: HasChars a => a -> Doc a
-vfill t = Block (realLength t, 1) (repeat t)
+-- expands to the height of the box.  Strings cycle through the
+-- list provided.
+vfill :: HasChars a => [a] -> Doc a
+vfill ts = VFill (maximum (0 : map realLength ts)) ts
 
 chop :: HasChars a => Int -> a -> [a]
 chop n =
