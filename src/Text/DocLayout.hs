@@ -74,6 +74,7 @@ import Data.Char (isSpace)
 import Data.List (intersperse, foldl')
 import Data.String
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
 import Data.Text (Text)
 
 -- | Class abstracting over various string types that
@@ -95,6 +96,12 @@ instance HasChars String where
   splitLines    = lines . (++"\n")
   replicateChar = replicate
   isNull        = null
+
+instance HasChars TL.Text where
+  foldrChar         = TL.foldr
+  splitLines        = TL.splitOn "\n"
+  replicateChar n c = TL.replicate (fromIntegral n) (TL.singleton c)
+  isNull            = TL.null
 
 data Doc a = Text Int a
          | Block Int [a]
