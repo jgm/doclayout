@@ -41,6 +41,7 @@ module Text.DocLayout (
      , lblock
      , cblock
      , rblock
+     , vfill
      , (<>)
      , (<+>)
      , ($$)
@@ -103,7 +104,7 @@ instance HasChars TL.Text where
   isNull            = TL.null
 
 data Doc a = Text Int a
-         | Block Int [a]
+         | Block (Int, Int) [a]  -- ^ (width, height)
          | Prefixed Text (Doc a)
          | BeforeNonBlank (Doc a)
          | Flush (Doc a)
@@ -299,33 +300,35 @@ normalize (BreakingSpace : BreakingSpace : xs) = normalize (BreakingSpace:xs)
 normalize (Block i1 s1 : Block i2 s2  : xs) =
   normalize (mergeBlocks False (IsBlock i1 s1) (IsBlock i2 s2) : xs)
 normalize (Block i1 s1 : Text n t : xs) =
-  normalize (mergeBlocks False (IsBlock i1 s1) (IsBlock n [t]) : xs)
+  normalize (mergeBlocks False (IsBlock i1 s1) (IsBlock (n,1) [t]) : xs)
 normalize (Block i1 s1 : BreakingSpace : Block i2 s2 : xs) =
   normalize (mergeBlocks True (IsBlock i1 s1) (IsBlock i2 s2) : xs)
 normalize (Block i1 s1 : BreakingSpace : Text n t : xs) =
-  normalize (mergeBlocks True (IsBlock i1 s1) (IsBlock n [t]) : xs)
+  normalize (mergeBlocks True (IsBlock i1 s1) (IsBlock (n,1) [t]) : xs)
 normalize (x:xs) = x : normalize xs
 
-data IsBlock a = IsBlock Int [a]
+data IsBlock a = IsBlock (Int, Int) [a]
 -- This would be nicer with a pattern synonym
 -- pattern VBlock i s <- mkIsBlock -> Just (IsBlock ..)
 
 mergeBlocks :: HasChars a => Bool -> IsBlock a -> IsBlock a -> Doc a
-mergeBlocks addSpace (IsBlock w1 lns1) (IsBlock w2 lns2) =
-  Block (w1 + w2 + if addSpace then 1 else 0) $
-     zipWith (\l1 l2 -> pad w1 l1 <> l2) lns1' (map sp lns2')
-    where (lns1', lns2') = case (length lns1, length lns2) of
-                                (x, y) | x > y -> (lns1,
-                                                   lns2 ++ replicate (x - y)
-                                                            mempty)
-                                       | x < y -> (lns1 ++ replicate (y - x)
-                                                            mempty ,
-                                                   lns2)
-                                       | otherwise -> (lns1, lns2)
-          pad n s = s <> replicateChar (n - realLength s) ' '
-          sp xs = if addSpace && realLength xs > 0
-                     then " " <> xs
-                     else xs
+mergeBlocks addSpace (IsBlock (w1,h1) lns1) (IsBlock (w2,h2) lns2) =
+  Block (w, h) $ zipWith (\l1 l2 -> pad w1 l1 <> l2) lns1' (map sp lns2')
+    where
+      w  = w1 + w2 + if addSpace then 1 else 0
+      len1 = length $ take h1 lns1  -- note lns1 might be infinite
+      len2 = length $ take h2 lns2
+      h  = max h1 h2
+      lns1' = if len1 < h
+                 then lns1 ++ replicate (h - len1) mempty
+                 else lns1
+      lns2' = if len2 < h
+                 then lns2 ++ replicate (h - len2) mempty
+                 else lns2
+      pad n s = s <> replicateChar (n - realLength s) ' '
+      sp xs = if addSpace && realLength xs > 0
+                 then " " <> xs
+                 else xs
 
 renderList :: HasChars a => [Doc a] -> DocState a
 renderList [] = return ()
@@ -426,10 +429,10 @@ renderList (Empty{} : _) = error "renderList encountered Empty"
 -- should be weeded out by unfoldD and normalize
 
 offsetOf :: Doc a -> Int
-offsetOf (Text o _)    = o
-offsetOf (Block w _)   = w
-offsetOf BreakingSpace = 1
-offsetOf _             = 0
+offsetOf (Text o _)      = o
+offsetOf (Block (w,_) _) = w
+offsetOf BreakingSpace   = 1
+offsetOf _               = 0
 
 -- | A literal string.
 text :: IsString a => String -> Doc a
@@ -532,8 +535,14 @@ height = length . splitLines . render Nothing
 block :: HasChars a => (a -> a) -> Int -> Doc a -> Doc a
 block filler width d
   | width < 1 && not (isEmpty d) = block filler 1 d
-  | otherwise                    = Block width $ map filler
-                                 $ chop width $ render (Just width) d
+  | otherwise                    = Block (width, length ls) ls
+     where
+       ls = map filler $ chop width $ render (Just width) d
+
+-- | An expandable border that, when placed next to a box,
+-- expands to the height of the box.
+vfill :: HasChars a => a -> Doc a
+vfill t = Block (realLength t, 1) (repeat t)
 
 chop :: HasChars a => Int -> a -> [a]
 chop n =

@@ -233,4 +233,11 @@ tests =
       (beforeNonBlank "!!" <> " ab" $$
        beforeNonBlank "!!" <> "a b")
       " ab\n!!a b"
+
+  , renderTest "vfill"
+      Nothing
+      (vfill "|" <> cblock 5 ("a" $$ "bbb" $$ "ccccc") <> lblock 2 "dd" <+>
+          vfill "+")
+      "|  a  dd +\n| bbb    +\n|ccccc   +"
+
   ]
