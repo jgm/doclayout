@@ -76,7 +76,6 @@ import Data.String
 import qualified Data.Text as T
 import Data.Text (Text)
 import qualified Text.DocTemplates as DT
-import Debug.Trace
 
 -- | Class abstracting over various string types that
 -- can fold over characters.
