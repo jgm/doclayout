@@ -316,9 +316,9 @@ mergeBlocks addSpace (IsBlock (w1,h1) lns1) (IsBlock (w2,h2) lns2) =
   Block (w, h) $ zipWith (\l1 l2 -> pad w1 l1 <> l2) lns1' (map sp lns2')
     where
       w  = w1 + w2 + if addSpace then 1 else 0
-      len1 = length $ take h1 lns1  -- note lns1 might be infinite
-      len2 = length $ take h2 lns2
       h  = max h1 h2
+      len1 = length $ take h lns1  -- note lns1 might be infinite
+      len2 = length $ take h lns2
       lns1' = if len1 < h
                  then lns1 ++ replicate (h - len1) mempty
                  else lns1
