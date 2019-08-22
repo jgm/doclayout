@@ -3,7 +3,7 @@ packages:
 - '.'
 extra-deps:
 - git: https://github.com/jgm/doctemplates
-  commit: 9d25d6cdc6a32dfc76d8fc0048c91001b5aed108
+  commit: 8ef1f758d49a3f0e6ece783e4c744bbbe152cc3f
 flags: {}
 extra-package-dbs: []
 ghc-options:
