@@ -76,17 +76,17 @@ tests =
  , renderTest "align with box"
      Nothing
      ("aa" <> lblock 2 ("bb" $$ "cc") <> "dd")
-     "aabbdd\n  cc"
+     "aabb\n  ccdd"
 
  , renderTest "centered box"
      Nothing
      ("aa" <> cblock 4 ("bb" $$ "cc") <> "dd")
-     "aa bb dd\n   cc"
+     "aa bb\n   cc dd"
 
  , renderTest "blanks at beginning"
      Nothing
      (blanklines 2 <> "aa")
-     "\n\naa"
+     "aa"
 
  , renderTest "blanks at end"
      Nothing

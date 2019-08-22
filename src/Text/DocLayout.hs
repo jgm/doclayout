@@ -272,7 +272,7 @@ render linelen doc = mconcat . reverse . output $
                           , usePrefix = True
                           , lineLength = linelen
                           , column = 0
-                          , newlines = 2 }
+                          , newlines = 1000 }
 
 renderDoc :: HasChars a => Doc a -> DocState a
 renderDoc = renderList . unfoldD
