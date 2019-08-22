@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP                        #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -131,9 +130,9 @@ instance IsString a => IsString (Doc a) where
 
 unfoldD :: Doc a -> [Doc a]
 unfoldD Empty = []
-unfoldD (Concat x@(Concat{}) y) = unfoldD x <> unfoldD y
-unfoldD (Concat x y)            = x : unfoldD y
-unfoldD x                       = [x]
+unfoldD (Concat x@Concat{} y) = unfoldD x <> unfoldD y
+unfoldD (Concat x y)          = x : unfoldD y
+unfoldD x                     = [x]
 
 isBlank :: Doc a -> Bool
 isBlank BreakingSpace  = True
@@ -289,11 +288,11 @@ renderList (Concat{} : xs) = renderList xs -- should not happen after unfoldD
 
 renderList (Empty : xs) = renderList xs -- should not happen after unfoldD
 
-renderList (NewLine : []) = renderList [CarriageReturn]
+renderList [NewLine] = renderList [CarriageReturn]
 
-renderList (BlankLines _ : []) = renderList [CarriageReturn]
+renderList [BlankLines _] = renderList [CarriageReturn]
 
-renderList (BreakingSpace : []) = return ()
+renderList [BreakingSpace] = return ()
 
 renderList (Text off s : xs) = do
   outp off s
@@ -391,11 +390,8 @@ renderList (BreakingSpace : xs) = do
   st <- get
   let off = foldl' (+) 0 $ map offsetOf next
   case lineLength st of
-        Just l | column st + 1 + off > l -> do
-          newline
-        _  -> if column st > 0
-                 then outp 1 " "
-                 else return ()
+        Just l | column st + 1 + off > l -> newline
+        _  -> when (column st > 0) $ outp 1 " "
   renderList xs'
 
 renderList (AfterBreak t : xs) = do
@@ -480,7 +476,7 @@ blankline = BlankLines 1
 -- | Inserts blank lines unless they exist already.
 -- (@blanklines m <> blanklines n@ has the same effect as @blanklines (max m n)@.
 blanklines :: Int -> Doc a
-blanklines n = BlankLines n
+blanklines = BlankLines
 
 -- | Uses the specified string as a prefix for every line of
 -- the inside document (except the first, if not at the beginning
@@ -509,18 +505,18 @@ hang ind start doc = start <> nest ind doc
 -- | @beforeNonBlank d@ conditionally includes @d@ unless it is
 -- followed by blank space.
 beforeNonBlank :: Doc a -> Doc a
-beforeNonBlank d = BeforeNonBlank d
+beforeNonBlank = BeforeNonBlank
 
 -- | Makes a 'Doc' non-reflowable.
 nowrap :: IsString a => Doc a -> Doc a
-nowrap doc = mconcat . map replaceSpace . unfoldD $ doc
+nowrap = mconcat . map replaceSpace . unfoldD
   where replaceSpace BreakingSpace = Text 1 $ fromString " "
         replaceSpace x             = x
 
 -- | Content to print only if it comes at the beginning of a line,
 -- to be used e.g. for escaping line-initial `.` in roff man.
 afterBreak :: Text -> Doc a
-afterBreak t = AfterBreak t
+afterBreak = AfterBreak
 
 -- | Returns the width of a 'Doc'.
 offset :: HasChars a => Doc a -> Int
