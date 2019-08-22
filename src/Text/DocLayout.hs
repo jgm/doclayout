@@ -134,14 +134,6 @@ unfoldD (Concat x@Concat{} y) = unfoldD x <> unfoldD y
 unfoldD (Concat x y)          = x : unfoldD y
 unfoldD x                     = [x]
 
-isBlank :: Doc a -> Bool
-isBlank BreakingSpace  = True
-isBlank CarriageReturn = True
-isBlank NewLine        = True
-isBlank (BlankLines _) = True
--- isBlank (Text _ (c:_)) = isSpace c
-isBlank _              = False
-
 -- | True if the document is empty.
 isEmpty :: Doc a -> Bool
 isEmpty Empty = True
@@ -320,6 +312,17 @@ renderList (BeforeNonBlank d : xs) =
     (x:_) | isBlank x -> renderList xs
           | otherwise -> renderDoc d >> renderList xs
     []                -> renderList xs
+ where
+   isBlank :: HasChars a => Doc a -> Bool
+   isBlank BreakingSpace  = True
+   isBlank CarriageReturn = True
+   isBlank NewLine        = True
+   isBlank (BlankLines _) = True
+   isBlank (Text _ t)     = foldrChar
+                                (\c _ -> if isSpace c then True else False)
+                                False t
+   isBlank _              = False
+
 
 renderList (BlankLines m : BlankLines n : xs) =
   renderList (BlankLines (max m n) : xs)

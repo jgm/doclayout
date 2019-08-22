@@ -227,4 +227,10 @@ tests =
       Nothing
       (hang 5 (nowrap "xxx") mempty)
       "xxx"
+
+  , renderTest "beforeNonBlank"
+      Nothing
+      (beforeNonBlank "!!" <> " ab" $$
+       beforeNonBlank "!!" <> "a b")
+      " ab\n!!a b"
   ]
