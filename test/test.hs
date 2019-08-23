@@ -5,6 +5,10 @@ import Text.DocLayout
 import Test.Tasty
 import Test.Tasty.HUnit
 import Data.Text (Text)
+#if MIN_VERSION_base(4,11,0)
+#else
+import Data.Semigroup
+#endif
 
 main :: IO ()
 main = defaultMain $ testGroup "Tests" tests
