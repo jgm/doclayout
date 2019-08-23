@@ -104,9 +104,9 @@ instance HasChars TL.Text where
   replicateChar n c = TL.replicate (fromIntegral n) (TL.singleton c)
   isNull            = TL.null
 
--- | Document, including structure relevant for layout. 
+-- | Document, including structure relevant for layout.
 data Doc a = Text Int a
-         | Block (Int, Int) [a]  -- ^ (width, height)
+         | Block Int [a]
          | VFill Int a
          | Prefixed Text (Doc a)
          | BeforeNonBlank (Doc a)
@@ -399,12 +399,12 @@ renderList (AfterBreak t : xs) = do
 renderList (b : xs) | isBlock b = do
   let (bs, rest) = span isBlock xs
   -- ensure we have right padding unless end of line
-  let heightOf (Block (_,x) _) = x
-      heightOf _               = 1
+  let heightOf (Block _ ls) = length ls
+      heightOf _            = 1
   let maxheight = maximum $ map heightOf (b:bs)
-  let toBlockSpec (Block (w,_) ls) = (w, ls)
-      toBlockSpec (VFill w t)      = (w, take maxheight $ repeat t)
-      toBlockSpec _                = (0, [])
+  let toBlockSpec (Block w ls) = (w, ls)
+      toBlockSpec (VFill w t)  = (w, take maxheight $ repeat t)
+      toBlockSpec _            = (0, [])
   let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
                              (map toBlockSpec bs)
   st <- get
@@ -425,7 +425,7 @@ isBlock _       = False
 
 offsetOf :: Doc a -> Int
 offsetOf (Text o _)      = o
-offsetOf (Block (w,_) _) = w
+offsetOf (Block w _)     = w
 offsetOf (VFill w _)     = w
 offsetOf BreakingSpace   = 1
 offsetOf _               = 0
@@ -531,7 +531,7 @@ height = length . splitLines . render Nothing
 block :: HasChars a => (a -> a) -> Int -> Doc a -> Doc a
 block filler width d
   | width < 1 && not (isEmpty d) = block filler 1 d
-  | otherwise                    = Block (width, length ls) ls
+  | otherwise                    = Block width ls
      where
        ls = map filler $ chop width $ render (Just width) d
 
