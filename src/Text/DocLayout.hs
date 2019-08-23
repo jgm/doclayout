@@ -105,7 +105,7 @@ instance HasChars TL.Text where
 
 data Doc a = Text Int a
          | Block (Int, Int) [a]  -- ^ (width, height)
-         | VFill Int [a]
+         | VFill Int a
          | Prefixed Text (Doc a)
          | BeforeNonBlank (Doc a)
          | Flush (Doc a)
@@ -404,7 +404,7 @@ renderList (b : xs) | isBlock b = do
       heightOf _               = 1
   let maxheight = maximum $ map heightOf (b:bs)
   let toBlockSpec (Block (w,_) ls) = (w, ls)
-      toBlockSpec (VFill w ls)     = (w, take maxheight $ cycle ls)
+      toBlockSpec (VFill w t)      = (w, take maxheight $ repeat t)
       toBlockSpec _                = (0, [])
   let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
                              (map toBlockSpec bs)
@@ -539,8 +539,8 @@ block filler width d
 -- | An expandable border that, when placed next to a box,
 -- expands to the height of the box.  Strings cycle through the
 -- list provided.
-vfill :: HasChars a => [a] -> Doc a
-vfill ts = VFill (maximum (0 : map realLength ts)) ts
+vfill :: HasChars a => a -> Doc a
+vfill t = VFill (realLength t) t
 
 chop :: HasChars a => Int -> a -> [a]
 chop n =

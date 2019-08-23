@@ -236,13 +236,13 @@ tests =
 
   , renderTest "vfill"
       Nothing
-      (vfill ["|"] <> cblock 5 ("a" $$ "bbb" $$ "ccccc") <> lblock 3 "dd" <>
-          vfill ["+","|"])
-      "|  a  dd +\n| bbb    |\n|ccccc   +"
+      (vfill "|" <> cblock 5 ("a" $$ "bbb" $$ "ccccc") <> lblock 3 "dd" <>
+          vfill "+")
+      "|  a  dd +\n| bbb    +\n|ccccc   +"
 
   , renderTest "vfill 2"
       Nothing
-      (vfill ["| "] <> cblock 5 ("a" $$ "bbb") <> vfill [" | "] <>
-          lblock 2 ("dd" $$ "ee" $$ "ff") <> vfill [" |"])
+      (vfill "| " <> cblock 5 ("a" $$ "bbb") <> vfill " | " <>
+          lblock 2 ("dd" $$ "ee" $$ "ff") <> vfill " |")
       "|   a   | dd |\n|  bbb  | ee |\n|       | ff |"
   ]
