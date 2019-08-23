@@ -20,9 +20,8 @@ blocks for tables.
 -}
 
 module Text.DocLayout (
-       Doc(..)
-     , HasChars(..)
-     , render
+     -- * Rendering
+       render
      -- * Doc constructors
      , cr
      , blankline
@@ -65,6 +64,9 @@ module Text.DocLayout (
      , height
      , charWidth
      , realLength
+     -- * Types
+     , Doc(..)
+     , HasChars(..)
      )
 
 where
