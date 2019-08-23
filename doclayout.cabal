@@ -10,7 +10,7 @@ license:             BSD3
 license-file:        LICENSE
 author:              John MacFarlane
 maintainer:          jgm@berkeley.edu
-copyright:           2016 John MacFarlane
+copyright:           2016-19 John MacFarlane
 category:            Text
 build-type:          Simple
 -- extra-source-files:
