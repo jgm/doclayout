@@ -22,6 +22,7 @@ module Text.DocLayout (
        Doc(..)
      , HasChars(..)
      , render
+     -- * Doc constructors
      , cr
      , blankline
      , blanklines
@@ -35,24 +36,10 @@ module Text.DocLayout (
      , beforeNonBlank
      , nowrap
      , afterBreak
-     , offset
-     , minOffset
-     , height
      , lblock
      , cblock
      , rblock
      , vfill
-     , (<>)
-     , (<+>)
-     , ($$)
-     , ($+$)
-     , isEmpty
-     , empty
-     , cat
-     , hcat
-     , hsep
-     , vcat
-     , vsep
      , nestle
      , chomp
      , inside
@@ -61,6 +48,20 @@ module Text.DocLayout (
      , parens
      , quotes
      , doubleQuotes
+     , empty
+     -- * Functions for concatenating documents.
+     , (<+>)
+     , ($$)
+     , ($+$)
+     , hcat
+     , hsep
+     , vcat
+     , vsep
+     -- * Functions for querying documents.
+     , isEmpty
+     , offset
+     , minOffset
+     , height
      , charWidth
      , realLength
      )
@@ -103,6 +104,7 @@ instance HasChars TL.Text where
   replicateChar n c = TL.replicate (fromIntegral n) (TL.singleton c)
   isNull            = TL.null
 
+-- | Document, including structure relevant for layout. 
 data Doc a = Text Int a
          | Block (Int, Int) [a]  -- ^ (width, height)
          | VFill Int a
@@ -130,6 +132,7 @@ instance Monoid (Doc a) where
 instance IsString a => IsString (Doc a) where
   fromString = text
 
+-- | Unfold a 'Doc' into a flat list.
 unfoldD :: Doc a -> [Doc a]
 unfoldD Empty = []
 unfoldD (Concat x@Concat{} y) = unfoldD x <> unfoldD y
@@ -145,15 +148,11 @@ isEmpty _     = False
 empty :: Doc a
 empty = mempty
 
--- | Concatenate a list of 'Doc's.
-cat :: [Doc a] -> Doc a
-cat = mconcat
-
--- | Same as 'cat'.
+-- | Concatenate documents horizontally.
 hcat :: [Doc a] -> Doc a
 hcat = mconcat
 
--- | Concatenate a list of 'D's, putting breakable spaces
+-- | Concatenate a list of 'Doc's, putting breakable spaces
 -- between them.
 infixr 6 <+>
 (<+>) :: Doc a -> Doc a -> Doc a
@@ -162,7 +161,7 @@ infixr 6 <+>
   | isEmpty y = x
   | otherwise = x <> space <> y
 
--- | Same as 'cat', but putting breakable spaces between the
+-- | Same as 'hcat', but putting breakable spaces between the
 -- 'Doc's.
 hsep :: [Doc a] -> Doc a
 hsep = foldr (<+>) empty
@@ -253,7 +252,7 @@ outp off s = do           -- offset >= 0 (0 might be combining char)
                     , column = column st + off
                     , newlines = 0 }
 
--- | Renders a 'Doc'.  @render (Just n)@ will use
+-- | Render a 'Doc'.  @render (Just n)@ will use
 -- a line length of @n@ to reflow text on breakable spaces.
 -- @render Nothing@ will not reflow text.
 render :: HasChars a => Maybe Int -> Doc a -> a
