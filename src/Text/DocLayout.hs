@@ -87,7 +87,7 @@ import Data.Semigroup
 
 -- | Class abstracting over various string types that
 -- can fold over characters.
-class (IsString a, Monoid a, Show a) => HasChars a where
+class (IsString a, Semigroup a, Monoid a, Show a) => HasChars a where
   foldrChar     :: (Char -> b -> b) -> b -> a -> b
   splitLines    :: a -> [a]
   replicateChar :: Int -> Char -> a
