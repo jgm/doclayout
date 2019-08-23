@@ -83,6 +83,7 @@ import Data.Text (Text)
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup
+import Data.Monoid
 #endif
 
 -- | Class abstracting over various string types that
