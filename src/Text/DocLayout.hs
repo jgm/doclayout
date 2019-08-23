@@ -1,9 +1,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE DeriveFoldable    #-}
 {-# LANGUAGE DeriveTraversable #-}
 {- |
    Module      : Text.DocLayout
@@ -15,7 +15,8 @@
    Portability : portable
 
 A prettyprinting library for the production of text documents,
-including wrapped text, indentated blocks, and tables.
+including wrapped text, indentation and other prefixes, and
+blocks for tables.
 -}
 
 module Text.DocLayout (
@@ -105,18 +106,22 @@ instance HasChars TL.Text where
   isNull            = TL.null
 
 -- | Document, including structure relevant for layout.
-data Doc a = Text Int a
-         | Block Int [a]
-         | VFill Int a
-         | Prefixed Text (Doc a)
-         | BeforeNonBlank (Doc a)
-         | Flush (Doc a)
-         | BreakingSpace
-         | AfterBreak Text
-         | CarriageReturn
-         | NewLine
-         | BlankLines Int  -- number of blank lines
-         | Concat (Doc a) (Doc a)
+data Doc a = Text Int a            -- ^ Text with specified width.
+         | Block Int [a]           -- ^ A block with a width and lines.
+         | VFill Int a             -- ^ A vertically expandable block;
+                 -- when concatenated with a block, expands to height
+                 -- of block, with each line containing the specified text.
+         | Prefixed Text (Doc a)   -- ^ Doc with each line prefixed with text.
+                 -- Note that trailing blanks are omitted from the prefix
+                 -- when the line after it is empty.
+         | BeforeNonBlank (Doc a)  -- ^ Doc that renders only before nonblank.
+         | Flush (Doc a)           -- ^ Doc laid out flush to left margin.
+         | BreakingSpace           -- ^ A space or line break, in context.
+         | AfterBreak Text         -- ^ Text printed only at start of line.
+         | CarriageReturn          -- ^ Newline unless we're at start of line.
+         | NewLine                 -- ^ newline.
+         | BlankLines Int          -- ^ Ensure a number of blank lines.
+         | Concat (Doc a) (Doc a)  -- ^ Two documents concatenated.
          | Empty
          deriving (Show, Eq, Functor, Foldable, Traversable)
 
