@@ -80,6 +80,10 @@ import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Text (Text)
+#if MIN_VERSION_base(4,11,0)
+#else
+import Data.Semigroup
+#endif
 
 -- | Class abstracting over various string types that
 -- can fold over characters.
