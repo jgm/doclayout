@@ -49,7 +49,7 @@ module Text.DocLayout (
      , quotes
      , doubleQuotes
      , empty
-     -- * Functions for concatenating documents.
+     -- * Functions for concatenating documents
      , (<+>)
      , ($$)
      , ($+$)
@@ -57,7 +57,7 @@ module Text.DocLayout (
      , hsep
      , vcat
      , vsep
-     -- * Functions for querying documents.
+     -- * Functions for querying documents
      , isEmpty
      , offset
      , minOffset
