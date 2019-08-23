@@ -1,8 +1,13 @@
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE OverloadedStrings #-}
 import Text.DocLayout
 import Data.Text (Text)
 import Criterion.Main
 import Criterion.Types (Config (..))
+#if MIN_VERSION_base(4,11,0)
+#else
+import Data.Semigroup
+#endif
 
 main :: IO ()
 main = defaultMainWith defaultConfig{ timeLimit = 10.0 } $ cases
