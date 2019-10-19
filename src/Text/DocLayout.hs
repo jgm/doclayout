@@ -2,9 +2,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE DeriveFunctor     #-}
 {-# LANGUAGE DeriveFoldable    #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {- |
    Module      : Text.DocLayout
    Copyright   : Copyright (C) 2010-2019 John MacFarlane
@@ -74,8 +76,10 @@ import Prelude
 import Safe (lastMay, initSafe)
 import Control.Monad
 import Control.Monad.State.Strict
+import GHC.Generics
 import Data.Char (isSpace)
 import Data.List (intersperse, foldl')
+import Data.Data (Data, Typeable)
 import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
@@ -129,7 +133,8 @@ data Doc a = Text Int a            -- ^ Text with specified width.
          | BlankLines Int          -- ^ Ensure a number of blank lines.
          | Concat (Doc a) (Doc a)  -- ^ Two documents concatenated.
          | Empty
-         deriving (Show, Eq, Functor, Foldable, Traversable)
+         deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
+                  Data, Typeable, Generic)
 
 instance Semigroup (Doc a) where
   x <> Empty = x
