@@ -368,18 +368,6 @@ renderList (BeforeNonBlank d : xs) =
     (x:_) | isBlank x -> renderList xs
           | otherwise -> renderDoc d >> renderList xs
     []                -> renderList xs
- where
-   isBlank :: HasChars a => Doc a -> Bool
-   isBlank BreakingSpace  = True
-   isBlank CarriageReturn = True
-   isBlank NewLine        = True
-   isBlank (BlankLines _) = True
-   isBlank (Text _ t)     = foldrChar
-                                (\c _ -> if isSpace c then True else False)
-                                False t
-   isBlank _              = False
-
-
 renderList (BlankLines num : xs) = do
   st <- get
   case output st of
@@ -442,6 +430,22 @@ renderList (b : xs) | isBlock b = do
   renderList rest
 
 renderList (x:_) = error $ "renderList encountered " ++ show x
+
+isBreak :: Doc a -> Bool
+isBreak CarriageReturn = True
+isBreak NewLine = True
+isBreak (BlankLines _) = True
+isBreak _ = False
+
+isBlank :: HasChars a => Doc a -> Bool
+isBlank BreakingSpace  = True
+isBlank CarriageReturn = True
+isBlank NewLine        = True
+isBlank (BlankLines _) = True
+isBlank (Text _ t)     = foldrChar
+                             (\c _ -> if isSpace c then True else False)
+                             False t
+isBlank _              = False
 
 isBlock :: Doc a -> Bool
 isBlock Block{} = True
@@ -533,12 +537,45 @@ afterBreak :: Text -> Doc a
 afterBreak = AfterBreak
 
 -- | Returns the width of a 'Doc'.
-offset :: HasChars a => Doc a -> Int
-offset d = maximum (0: map realLength (splitLines $ render Nothing d))
+offset :: (IsString a, HasChars a) => Doc a -> Int
+offset = uncurry max . foldr adjustOffset (0,0) .
+          resolveSpecials . unfoldD
 
 -- | Returns the minimal width of a 'Doc' when reflowed at breakable spaces.
 minOffset :: HasChars a => Doc a -> Int
-minOffset d = maximum (0: map realLength (splitLines $ render (Just 0) d))
+minOffset = uncurry max . foldr adjustOffset (0,0) .
+            resolveSpecials . map breakingSpaceToCr . unfoldD
+
+breakingSpaceToCr :: Doc a -> Doc a
+breakingSpaceToCr BreakingSpace = CarriageReturn
+breakingSpaceToCr x = x
+
+-- resolve BeforeNonBlank, AfterBreak
+resolveSpecials :: (IsString a, HasChars a) => [Doc a] -> [Doc a]
+resolveSpecials [] = []
+resolveSpecials (BeforeNonBlank d : d' : ds)
+  | isBlank d' = d' : resolveSpecials ds
+  | otherwise  = d : resolveSpecials (d':ds)
+resolveSpecials (d' : AfterBreak t : ds)
+  | isBreak d' = d' : resolveSpecials
+                   (literal (fromString (T.unpack t)):ds)
+  | otherwise  = d' : resolveSpecials ds
+resolveSpecials (x:xs) = x : resolveSpecials xs
+
+adjustOffset :: Doc a -> (Int, Int) -> (Int, Int)
+adjustOffset d (curlen, maxlen) =
+  case d of
+    Text n _  -> (curlen + n, maxlen)
+    Block n _ -> (curlen + n, maxlen)
+    VFill n _ -> (curlen + n, maxlen)
+    Prefixed t d' -> adjustOffset d' (curlen + T.length t, maxlen)
+    BreakingSpace -> (curlen + 1, maxlen)
+    Flush d' -> adjustOffset d' (curlen, maxlen)
+    CarriageReturn -> (0, max curlen maxlen)
+    NewLine -> (0, max curlen maxlen)
+    BlankLines _ -> (0, max curlen maxlen)
+    Concat d1 d2 -> adjustOffset d1 . adjustOffset d2 $ (curlen, maxlen)
+    _ -> (curlen, maxlen)
 
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left.
