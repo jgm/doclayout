@@ -25,6 +25,7 @@ module Text.DocLayout (
      -- * Rendering
        render
      -- * Doc constructors
+     , toDoc
      , cr
      , blankline
      , blanklines
@@ -147,6 +148,16 @@ instance Monoid (Doc a) where
 
 instance IsString a => IsString (Doc a) where
   fromString = text
+
+-- | Create a 'Doc' from a stringlike value.
+toDoc :: HasChars a => a -> Doc a
+toDoc x =
+  mconcat $
+    intersperse NewLine $
+      map (\s -> if isNull s
+                    then Empty
+                    else Text (realLength s) s) $
+        splitLines x
 
 -- | Unfold a 'Doc' into a flat list.
 unfoldD :: Doc a -> [Doc a]
