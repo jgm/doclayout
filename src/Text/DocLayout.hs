@@ -91,12 +91,20 @@ import Data.Semigroup
 #endif
 
 -- | Class abstracting over various string types that
--- can fold over characters.
+-- can fold over characters.  Minimal definition is 'foldrChar',
+-- but defining the other methods can give better performance.
 class (IsString a, Semigroup a, Monoid a, Show a) => HasChars a where
   foldrChar     :: (Char -> b -> b) -> b -> a -> b
-  splitLines    :: a -> [a]
   replicateChar :: Int -> Char -> a
+  replicateChar n c = fromString (replicate n c)
   isNull        :: a -> Bool
+  isNull = foldrChar (\_ _ -> False) True
+  splitLines    :: a -> [a]
+  splitLines s = (fromString firstline : otherlines)
+   where
+    (firstline, otherlines) = foldrChar go ([],[]) s
+    go '\n' (cur,lns) = ([], fromString cur : lns)
+    go c    (cur,lns) = (c:cur, lns)
 
 instance HasChars Text where
   foldrChar         = T.foldr
@@ -106,9 +114,9 @@ instance HasChars Text where
 
 instance HasChars String where
   foldrChar     = foldr
-  splitLines    = lines . (++"\n")
+  -- splitLines    = lines . (++"\n")
   replicateChar = replicate
-  isNull        = null
+  -- isNull        = null
 
 instance HasChars TL.Text where
   foldrChar         = TL.foldr
