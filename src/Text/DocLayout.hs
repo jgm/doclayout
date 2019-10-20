@@ -551,9 +551,8 @@ minOffset = uncurry max . foldr adjustOffset (0,0) .
 -- laid out character (assuming no wrapping).
 updateColumn :: HasChars a => Doc a -> Int -> Int
 updateColumn d oldcol =
-  fst $ foldr adjustOffset (oldcol,0)
-      $ takeWhile (not . isBreak)
-      $ reverse $ unfoldD d
+  fst . foldr adjustOffset (oldcol,0) .  resolveSpecials .
+        reverse . unfoldD $ d
 
 breakingSpaceToCr :: Doc a -> Doc a
 breakingSpaceToCr BreakingSpace = CarriageReturn
