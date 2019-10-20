@@ -64,6 +64,7 @@ module Text.DocLayout (
      , isEmpty
      , offset
      , minOffset
+     , updateColumn
      , height
      , charWidth
      , realLength
@@ -545,6 +546,14 @@ offset = uncurry max . foldr adjustOffset (0,0) .
 minOffset :: HasChars a => Doc a -> Int
 minOffset = uncurry max . foldr adjustOffset (0,0) .
             resolveSpecials . map breakingSpaceToCr . unfoldD
+
+-- | Returns the column that would be occupied by the last
+-- laid out character (assuming no wrapping).
+updateColumn :: HasChars a => Doc a -> Int -> Int
+updateColumn d oldcol =
+  fst $ foldr adjustOffset (oldcol,0)
+      $ takeWhile (not . isBreak)
+      $ reverse $ unfoldD d
 
 breakingSpaceToCr :: Doc a -> Doc a
 breakingSpaceToCr BreakingSpace = CarriageReturn
