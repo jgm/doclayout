@@ -25,11 +25,11 @@ module Text.DocLayout (
      -- * Rendering
        render
      -- * Doc constructors
-     , toDoc
      , cr
      , blankline
      , blanklines
      , space
+     , literal
      , text
      , char
      , prefixed
@@ -146,18 +146,8 @@ instance Monoid (Doc a) where
   mappend = (<>)
   mempty = Empty
 
-instance IsString a => IsString (Doc a) where
+instance HasChars a => IsString (Doc a) where
   fromString = text
-
--- | Create a 'Doc' from a stringlike value.
-toDoc :: HasChars a => a -> Doc a
-toDoc x =
-  mconcat $
-    intersperse NewLine $
-      map (\s -> if isNull s
-                    then Empty
-                    else Text (realLength s) s) $
-        splitLines x
 
 -- | Unfold a 'Doc' into a flat list.
 unfoldD :: Doc a -> [Doc a]
@@ -457,18 +447,22 @@ offsetOf (VFill w _)     = w
 offsetOf BreakingSpace   = 1
 offsetOf _               = 0
 
--- | A literal string.
-text :: IsString a => String -> Doc a
-text "" = mempty
-text s = case break (=='\n') s of
-           ("", "")   -> Empty
-           (xs, "")   -> Text (realLength xs) (fromString xs)
-           ("", _:ys) -> NewLine <> text ys
-           (xs, _:ys) -> Text (realLength xs) (fromString xs) <>
-                           NewLine <> text ys
+-- | Create a 'Doc' from a stringlike value.
+literal :: HasChars a => a -> Doc a
+literal x =
+  mconcat $
+    intersperse NewLine $
+      map (\s -> if isNull s
+                    then Empty
+                    else Text (realLength s) s) $
+        splitLines x
+
+-- | A literal string.  (Like 'literal', but restricted to String.)
+text :: HasChars a => String -> Doc a
+text = literal . fromString
 
 -- | A character.
-char :: IsString a => Char -> Doc a
+char :: HasChars a => Char -> Doc a
 char c = text $ fromString [c]
 
 -- | A breaking (reflowable) space.
@@ -597,23 +591,23 @@ inside start end contents =
   start <> contents <> end
 
 -- | Puts a 'Doc' in curly braces.
-braces :: IsString a => Doc a -> Doc a
+braces :: HasChars a => Doc a -> Doc a
 braces = inside (char '{') (char '}')
 
 -- | Puts a 'Doc' in square brackets.
-brackets :: IsString a => Doc a -> Doc a
+brackets :: HasChars a => Doc a -> Doc a
 brackets = inside (char '[') (char ']')
 
 -- | Puts a 'Doc' in parentheses.
-parens :: IsString a => Doc a -> Doc a
+parens :: HasChars a => Doc a -> Doc a
 parens = inside (char '(') (char ')')
 
 -- | Wraps a 'Doc' in single quotes.
-quotes :: IsString a => Doc a -> Doc a
+quotes :: HasChars a => Doc a -> Doc a
 quotes = inside (char '\'') (char '\'')
 
 -- | Wraps a 'Doc' in double quotes.
-doubleQuotes :: IsString a => Doc a -> Doc a
+doubleQuotes :: HasChars a => Doc a -> Doc a
 doubleQuotes = inside (char '"') (char '"')
 
 -- | Returns width of a character in a monospace font:  0 for a combining
