@@ -635,7 +635,7 @@ chop n =
                                | len' + clen > n ->
                                    (clen, cs):(len', l'):rest
                                | otherwise ->
-                                   (len' + clen, l' <> cs):rest
+                                   (len' + clen, cs <> l'):rest
                              [] -> [(clen, cs)]) [] l
 
 -- | Encloses a 'Doc' inside a start and end 'Doc'.
