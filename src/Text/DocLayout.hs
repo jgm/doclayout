@@ -115,9 +115,9 @@ instance HasChars Text where
 
 instance HasChars String where
   foldrChar     = foldr
-  -- splitLines    = lines . (++"\n")
+  splitLines    = lines . (++"\n")
   replicateChar = replicate
-  -- isNull        = null
+  isNull        = null
 
 instance HasChars TL.Text where
   foldrChar         = TL.foldr
