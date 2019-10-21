@@ -25,6 +25,11 @@ tests =
       (lblock 4 (text "hi there" :: Doc Text))
       "hi t\nhere"
 
+  , renderTest "nesting should not wrap"
+      (Just 10)
+      (nest 3 (text "abcdefghi" :: Doc Text))
+      "   abcdefghi"
+
   , renderTest "simple vcat"
       (Just 10)
       (vcat $ map chomp ["aaa", "bbb", "ccc"])
