@@ -20,8 +20,12 @@ renderTest title mblen doc expected =
 
 tests :: [TestTree]
 tests =
-  [
-    renderTest "simple vcat"
+  [ renderTest "lblock with chop"
+      Nothing
+      (lblock 4 (text "hi there" :: Doc Text))
+      "hi t\nhere"
+
+  , renderTest "simple vcat"
       (Just 10)
       (vcat $ map chomp ["aaa", "bbb", "ccc"])
       "aaa\nbbb\nccc"
