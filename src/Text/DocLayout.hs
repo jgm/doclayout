@@ -432,12 +432,6 @@ renderList (b : xs) | isBlock b = do
 
 renderList (x:_) = error $ "renderList encountered " ++ show x
 
-isBreak :: Doc a -> Bool
-isBreak CarriageReturn = True
-isBreak NewLine = True
-isBreak (BlankLines _) = True
-isBreak _ = False
-
 isBlank :: HasChars a => Doc a -> Bool
 isBlank BreakingSpace  = True
 isBlank CarriageReturn = True
@@ -539,46 +533,41 @@ afterBreak = AfterBreak
 
 -- | Returns the width of a 'Doc'.
 offset :: (IsString a, HasChars a) => Doc a -> Int
-offset d = uncurry max $ adjustOffset d (0,0)
+offset (Text n _) = n
+offset (Block n _) = n
+offset (VFill n _) = n
+offset Empty = 0
+offset CarriageReturn = 0
+offset NewLine = 0
+offset (BlankLines _) = 0
+offset d = maximum (0 : map realLength (splitLines (render Nothing d)))
 
 -- | Returns the minimal width of a 'Doc' when reflowed at breakable spaces.
 minOffset :: HasChars a => Doc a -> Int
-minOffset d =
-  uncurry max $ adjustOffset (breakingSpaceToCr d) (0,0)
+minOffset (Text n _) = n
+minOffset (Block n _) = n
+minOffset (VFill n _) = n
+minOffset Empty = 0
+minOffset CarriageReturn = 0
+minOffset NewLine = 0
+minOffset (BlankLines _) = 0
+minOffset d = maximum (0 : map realLength (splitLines (render (Just 0) d)))
 
 -- | Returns the column that would be occupied by the last
 -- laid out character (assuming no wrapping).
 updateColumn :: HasChars a => Doc a -> Int -> Int
-updateColumn d oldcol = fst $ adjustOffset d (oldcol,0)
-
-breakingSpaceToCr :: Doc a -> Doc a
-breakingSpaceToCr BreakingSpace = CarriageReturn
-breakingSpaceToCr (Concat x y) = Concat (breakingSpaceToCr x)
-                                        (breakingSpaceToCr y)
-breakingSpaceToCr (Prefixed t d) = Prefixed t $ breakingSpaceToCr d
-breakingSpaceToCr x = x
-
-adjustOffset :: HasChars a => Doc a -> (Int, Int) -> (Int, Int)
-adjustOffset d (curlen, maxlen) =
-  case d of
-    Text n _  -> (curlen + n, maxlen)
-    Block n _ -> (curlen + n, maxlen)
-    VFill n _ -> (curlen + n, maxlen)
-    Prefixed t d' -> adjustOffset d' (curlen + T.length t, maxlen)
-    BreakingSpace -> (curlen + 1, maxlen)
-    Flush d' -> adjustOffset d' (curlen, maxlen)
-    CarriageReturn -> (0, max curlen maxlen)
-    NewLine -> (0, max curlen maxlen)
-    BlankLines _ -> (0, max curlen maxlen)
-    Concat (BeforeNonBlank d2) d3 | not (isBlank d3) ->
-      adjustOffset d2 . adjustOffset d3 $ (curlen, maxlen)
-    Concat d1 (Concat (AfterBreak t) d2) | isBreak d1 ->
-      adjustOffset d2 .
-      (\(c,m) -> (c + T.length t,m)) . adjustOffset d1 $ (curlen, maxlen)
-    (Concat (Concat d1 d2) d3) -> adjustOffset (Concat d1 (Concat d2 d3))
-      (curlen, maxlen)
-    Concat d1 d2 -> adjustOffset d2 . adjustOffset d1 $ (curlen, maxlen)
-    _ -> (curlen, maxlen)
+updateColumn (Text n _) = (+ n)
+updateColumn (Block n _) = (+ n)
+updateColumn (VFill n _) = (+ n)
+updateColumn Empty = const 0
+updateColumn CarriageReturn = const 0
+updateColumn NewLine = const 0
+updateColumn (BlankLines _) = const 0
+updateColumn d =
+  case map realLength (splitLines (render Nothing d)) of
+    []  -> id
+    [n] -> (+ n)
+    xs  -> const (last xs)
 
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left.
