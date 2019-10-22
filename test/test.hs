@@ -20,7 +20,11 @@ renderTest title mblen doc expected =
 
 tests :: [TestTree]
 tests =
-  [ renderTest "lblock with chop"
+  [ testCase "offset prefixed" $
+      (offset (nest 3 (text "**" <> text "thisIsGoingToBeTooLongAnyway" <>
+                       text "**") <> blankline :: Doc Text) @?= 35)
+
+  , renderTest "lblock with chop"
       Nothing
       (lblock 4 (text "hi there" :: Doc Text))
       "hi t\nhere"

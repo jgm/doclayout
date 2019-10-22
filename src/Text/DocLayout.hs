@@ -539,38 +539,26 @@ afterBreak = AfterBreak
 
 -- | Returns the width of a 'Doc'.
 offset :: (IsString a, HasChars a) => Doc a -> Int
-offset = uncurry max . foldr adjustOffset (0,0) .
-          resolveSpecials . unfoldD
+offset d = uncurry max $ adjustOffset d (0,0)
 
 -- | Returns the minimal width of a 'Doc' when reflowed at breakable spaces.
 minOffset :: HasChars a => Doc a -> Int
-minOffset = uncurry max . foldr adjustOffset (0,0) .
-            resolveSpecials . map breakingSpaceToCr . unfoldD
+minOffset d =
+  uncurry max $ adjustOffset (breakingSpaceToCr d) (0,0)
 
 -- | Returns the column that would be occupied by the last
 -- laid out character (assuming no wrapping).
 updateColumn :: HasChars a => Doc a -> Int -> Int
-updateColumn d oldcol =
-  fst . foldr adjustOffset (oldcol,0) .  resolveSpecials .
-        reverse . unfoldD $ d
+updateColumn d oldcol = fst $ adjustOffset d (oldcol,0)
 
 breakingSpaceToCr :: Doc a -> Doc a
 breakingSpaceToCr BreakingSpace = CarriageReturn
+breakingSpaceToCr (Concat x y) = Concat (breakingSpaceToCr x)
+                                        (breakingSpaceToCr y)
+breakingSpaceToCr (Prefixed t d) = Prefixed t $ breakingSpaceToCr d
 breakingSpaceToCr x = x
 
--- resolve BeforeNonBlank, AfterBreak
-resolveSpecials :: (IsString a, HasChars a) => [Doc a] -> [Doc a]
-resolveSpecials [] = []
-resolveSpecials (BeforeNonBlank d : d' : ds)
-  | isBlank d' = d' : resolveSpecials ds
-  | otherwise  = d : resolveSpecials (d':ds)
-resolveSpecials (d' : AfterBreak t : ds)
-  | isBreak d' = d' : resolveSpecials
-                   (literal (fromString (T.unpack t)):ds)
-  | otherwise  = d' : resolveSpecials ds
-resolveSpecials (x:xs) = x : resolveSpecials xs
-
-adjustOffset :: Doc a -> (Int, Int) -> (Int, Int)
+adjustOffset :: HasChars a => Doc a -> (Int, Int) -> (Int, Int)
 adjustOffset d (curlen, maxlen) =
   case d of
     Text n _  -> (curlen + n, maxlen)
@@ -582,7 +570,14 @@ adjustOffset d (curlen, maxlen) =
     CarriageReturn -> (0, max curlen maxlen)
     NewLine -> (0, max curlen maxlen)
     BlankLines _ -> (0, max curlen maxlen)
-    Concat d1 d2 -> adjustOffset d1 . adjustOffset d2 $ (curlen, maxlen)
+    Concat (BeforeNonBlank d2) d3 | not (isBlank d3) ->
+      adjustOffset d2 . adjustOffset d3 $ (curlen, maxlen)
+    Concat d1 (Concat (AfterBreak t) d2) | isBreak d1 ->
+      adjustOffset d2 .
+      (\(c,m) -> (c + T.length t,m)) . adjustOffset d1 $ (curlen, maxlen)
+    (Concat (Concat d1 d2) d3) -> adjustOffset (Concat d1 (Concat d2 d3))
+      (curlen, maxlen)
+    Concat d1 d2 -> adjustOffset d2 . adjustOffset d1 $ (curlen, maxlen)
     _ -> (curlen, maxlen)
 
 -- | @lblock n d@ is a block of width @n@ characters, with
