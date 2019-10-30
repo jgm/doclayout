@@ -426,7 +426,7 @@ renderList (b : xs) | isBlock b = do
   case column st - realLength oldPref of
         n | n > 0 -> modify $ \s -> s{ prefix = oldPref <> T.replicate n " " }
         _ -> return ()
-  renderList $ intersperse CarriageReturn (map (Text 0) lns')
+  renderList $ intersperse CarriageReturn (map literal lns')
   modify $ \s -> s{ prefix = oldPref }
   renderList rest
 
