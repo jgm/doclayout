@@ -80,7 +80,7 @@ import Control.Monad
 import Control.Monad.State.Strict
 import GHC.Generics
 import Data.Char (isSpace)
-import Data.List (intersperse, foldl')
+import Data.List (intersperse)
 import Data.Data (Data, Typeable)
 import Data.String
 import qualified Data.Text as T
@@ -366,9 +366,9 @@ renderList (Flush d : xs) = do
 
 renderList (BeforeNonBlank d : xs) =
   case xs of
-    (x:_) | isBlank x -> renderList xs
-          | otherwise -> renderDoc d >> renderList xs
-    []                -> renderList xs
+    (x:_) | startsBlank x -> renderList xs
+          | otherwise     -> renderDoc d >> renderList xs
+    []                    -> renderList xs
 renderList (BlankLines num : xs) = do
   st <- get
   case output st of
@@ -389,16 +389,12 @@ renderList (NewLine : xs) = do
   renderList xs
 
 renderList (BreakingSpace : xs) = do
-  let isText (Text _ _)     = True
-      isText (Block _ _)    = True
-      isText (AfterBreak _) = True
-      isText _              = False
   let isBreakingSpace BreakingSpace = True
-      isBreakingSpace _             = False
+      isBreakingSpace _ = False
   let xs' = dropWhile isBreakingSpace xs
-  let next = takeWhile isText xs'
+  let next = takeWhile (not . isBlank) xs'
   st <- get
-  let off = foldl' (+) 0 $ map offsetOf next
+  let off = foldr ((+) . offsetOf) 0 next
   case lineLength st of
         Just l | column st + 1 + off > l -> newline
         _  -> when (column st > 0) $ outp 1 " "
@@ -433,14 +429,26 @@ renderList (b : xs) | isBlock b = do
 renderList (x:_) = error $ "renderList encountered " ++ show x
 
 isBlank :: HasChars a => Doc a -> Bool
-isBlank BreakingSpace  = True
-isBlank CarriageReturn = True
-isBlank NewLine        = True
-isBlank (BlankLines _) = True
-isBlank (Text _ t)     = foldrChar
-                             (\c _ -> if isSpace c then True else False)
-                             False t
-isBlank _              = False
+isBlank (Text _ t)         = isAllSpace t
+isBlank (Block _ ls)       = all isAllSpace ls
+isBlank (VFill _ t)        = isAllSpace t
+isBlank (Prefixed _ x)     = isBlank x
+isBlank (BeforeNonBlank x) = isBlank x
+isBlank (Flush x)          = isBlank x
+isBlank BreakingSpace      = True
+isBlank (AfterBreak t)     = isAllSpace t
+isBlank CarriageReturn     = True
+isBlank NewLine            = True
+isBlank (BlankLines _)     = True
+isBlank (Concat x y)       = isBlank x && isBlank y
+isBlank Empty              = True
+
+startsBlank :: HasChars a => Doc a -> Bool
+startsBlank (Text _ t) = foldrChar (const . isSpace) False t
+startsBlank x          = isBlank x
+
+isAllSpace :: HasChars a => a -> Bool
+isAllSpace = foldrChar ((&&) . isSpace) False
 
 isBlock :: Doc a -> Bool
 isBlock Block{} = True
