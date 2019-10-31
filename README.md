@@ -1,5 +1,8 @@
 # doclayout
 
+[![CI
+tests](https://github.com/jgm/doclayout/workflows/CI%20tests/badge.svg)](https://github.com/jgm/doclayout/actions)
+
 This is a prettyprinting library designed for laying out
 plain-text documents.  It originated in the pandoc module
 Text.Pandoc.Pretty, and its development has been guided by
