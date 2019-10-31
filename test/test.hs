@@ -263,4 +263,9 @@ tests =
       (vfill "| " <> cblock 5 ("a" $$ "bbb") <> vfill " | " <>
           lblock 2 ("dd" $$ "ee" $$ "ff") <> vfill " |")
       "|   a   | dd |\n|  bbb  | ee |\n|       | ff |"
+
+  , renderTest "combining character at start"
+      Nothing
+      (text "\870" <> space <> text "a")
+      "\870 a"
   ]
