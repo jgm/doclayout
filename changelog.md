@@ -1,5 +1,14 @@
 # doclayout
 
+## 0.2.0.1
+
+  * Made `realLength` smarter about combining characters.
+    If a string starts with a combining character, that character
+    takes up a width of 1; if the combining character occurs after
+    another character, it takes 0.  See jgm/pandoc#5863.
+  * Improve `isBlank`, re-use in rendering code `for BreakingSpace`.
+  * Fixed incorrect `Text` width in renderig blocks.
+
 ## 0.2
 
   * Add instances for `Doc`: `Data`, `Typeable`, `Ord`, `Read`, `Generic`.
