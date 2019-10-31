@@ -703,5 +703,13 @@ charWidth c =
 -- | Get real length of string, taking into account combining and double-wide
 -- characters.
 realLength :: HasChars a => a -> Int
-realLength = foldrChar (\c tot -> tot + charWidth c) 0
+realLength s = case foldrChar go (0, False) s of
+                 (n, True)  -> n + 1 -- first char is combining char
+                      -- which we counted as 0 but really takes space
+                 (n, False) -> n
+  where
+   go c (tot, _combiningChar) =
+     case charWidth c of
+       0 -> (tot, True)
+       n -> (tot + n, False)
 
