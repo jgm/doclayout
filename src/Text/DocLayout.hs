@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveGeneric     #-}
@@ -703,7 +704,7 @@ charWidth c =
 -- | Get real length of string, taking into account combining and double-wide
 -- characters.
 realLength :: HasChars a => a -> Int
-realLength s = case foldrChar go (0, False) s of
+realLength s = case foldr go (0, False) $ tolist s of
                  (n, True)  -> n + 1 -- first char is combining char
                       -- which we counted as 0 but really takes space
                  (n, False) -> n
@@ -712,4 +713,11 @@ realLength s = case foldrChar go (0, False) s of
      case charWidth c of
        0 -> (tot, True)
        n -> (tot + n, False)
+   -- We convert to a list and then foldr instead of using foldrChar
+   -- directly, since the latter approach yields a stack overflow
+   -- on Text inputs for large inputs (jgm/pandoc#6031).  Eventually
+   -- it might be good to adjust the HasChars API to include a strict
+   -- left fold.
+   tolist = foldrChar addToList []
+   addToList c cs = c:cs
 
