@@ -76,6 +76,8 @@ module Text.DocLayout (
 
 where
 import Prelude
+import Data.List (foldl')
+import Data.Maybe (fromMaybe)
 import Safe (lastMay, initSafe)
 import Control.Monad
 import Control.Monad.State.Strict
@@ -93,10 +95,12 @@ import Data.Semigroup
 #endif
 
 -- | Class abstracting over various string types that
--- can fold over characters.  Minimal definition is 'foldrChar',
--- but defining the other methods can give better performance.
+-- can fold over characters.  Minimal definition is 'foldrChar'
+-- and 'foldlChar', but defining the other methods can give better
+-- performance.
 class (IsString a, Semigroup a, Monoid a, Show a) => HasChars a where
   foldrChar     :: (Char -> b -> b) -> b -> a -> b
+  foldlChar     :: (b -> Char -> b) -> b -> a -> b
   replicateChar :: Int -> Char -> a
   replicateChar n c = fromString (replicate n c)
   isNull        :: a -> Bool
@@ -110,18 +114,21 @@ class (IsString a, Semigroup a, Monoid a, Show a) => HasChars a where
 
 instance HasChars Text where
   foldrChar         = T.foldr
+  foldlChar         = T.foldl'
   splitLines        = T.splitOn "\n"
   replicateChar n c = T.replicate n (T.singleton c)
   isNull            = T.null
 
 instance HasChars String where
   foldrChar     = foldr
+  foldlChar     = foldl'
   splitLines    = lines . (++"\n")
   replicateChar = replicate
   isNull        = null
 
 instance HasChars TL.Text where
   foldrChar         = TL.foldr
+  foldlChar         = TL.foldl'
   splitLines        = TL.splitOn "\n"
   replicateChar n c = TL.replicate (fromIntegral n) (TL.singleton c)
   isNull            = TL.null
@@ -704,13 +711,13 @@ charWidth c =
 -- | Get real length of string, taking into account combining and double-wide
 -- characters.
 realLength :: HasChars a => a -> Int
-realLength s = case foldrChar go (0, False) s of
-                 (n, True)  -> n + 1 -- first char is combining char
-                      -- which we counted as 0 but really takes space
-                 (n, False) -> n
+realLength s = fromMaybe 0 $ foldlChar go Nothing s
   where
-   go !c (!tot, !_combiningChar) =
-     case charWidth c of
-       0  -> (tot, True)
-       !n -> (tot + n, False)
-
+   -- Using a Maybe allows us to handle the case where the string
+   -- starts with a combining character.  Since there is no preceding
+   -- character, we count 0 width as 1 in this one case:
+   go Nothing !c =
+       case charWidth c of
+         0  -> Just 1
+         !n -> Just n
+   go (Just !tot) !c = Just (tot + charWidth c)
