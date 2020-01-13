@@ -709,8 +709,8 @@ realLength s = case foldrChar go (0, False) s of
                       -- which we counted as 0 but really takes space
                  (n, False) -> n
   where
-   go c (tot, _combiningChar) =
+   go !c (!tot, !_combiningChar) =
      case charWidth c of
-       0 -> (tot, True)
-       n -> (tot + n, False)
+       0  -> (tot, True)
+       !n -> (tot + n, False)
 
