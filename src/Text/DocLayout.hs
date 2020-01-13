@@ -436,27 +436,36 @@ renderList (b : xs) | isBlock b = do
 
 renderList (x:_) = error $ "renderList encountered " ++ show x
 
-isBlank :: HasChars a => Doc a -> Bool
-isBlank (Text _ t)         = isAllSpace t
-isBlank (Block _ ls)       = all isAllSpace ls
-isBlank (VFill _ t)        = isAllSpace t
-isBlank (Prefixed _ x)     = isBlank x
-isBlank (BeforeNonBlank x) = isBlank x
-isBlank (Flush x)          = isBlank x
-isBlank BreakingSpace      = True
-isBlank (AfterBreak t)     = isAllSpace t
-isBlank CarriageReturn     = True
-isBlank NewLine            = True
-isBlank (BlankLines _)     = True
-isBlank (Concat x y)       = isBlank x && isBlank y
-isBlank Empty              = True
+isBreakable :: HasChars a => Doc a -> Bool
+isBreakable BreakingSpace      = True
+isBreakable CarriageReturn     = True
+isBreakable NewLine            = True
+isBreakable (BlankLines _)     = True
+isBreakable (Concat Empty y)   = isBreakable y
+isBreakable (Concat x _)       = isBreakable x
+isBreakable _                  = False
+
+startsBlank' :: HasChars a => a -> Bool
+startsBlank' t = fromMaybe False $ foldlChar go Nothing t
+  where
+   go Nothing  c = Just (isSpace c)
+   go (Just b) _ = Just b
 
 startsBlank :: HasChars a => Doc a -> Bool
-startsBlank (Text _ t) = foldrChar (const . isSpace) False t
-startsBlank x          = isBlank x
-
-isAllSpace :: HasChars a => a -> Bool
-isAllSpace = foldrChar ((&&) . isSpace) False
+startsBlank (Text _ t)         = startsBlank' t
+startsBlank (Block n ls)       = n > 0 && all startsBlank' ls
+startsBlank (VFill n t)        = n > 0 && startsBlank' t
+startsBlank (BeforeNonBlank x) = startsBlank x
+startsBlank (Prefixed _ x)     = startsBlank x
+startsBlank (Flush x)          = startsBlank x
+startsBlank BreakingSpace      = True
+startsBlank (AfterBreak t)     = startsBlank (Text 0 t)
+startsBlank CarriageReturn     = True
+startsBlank NewLine            = True
+startsBlank (BlankLines _)     = True
+startsBlank (Concat Empty y)   = startsBlank y
+startsBlank (Concat x _)       = startsBlank x
+startsBlank Empty              = True
 
 isBlock :: Doc a -> Bool
 isBlock Block{} = True
