@@ -1,5 +1,18 @@
 # doclayout
 
+## 0.3
+
+  * Add foldlChar to signature of HasChars [API change].
+  * Use foldlChar in realLength. This avoids a stack overflow
+    we were getting with long strings in the previous version
+    (with foldrChar).  See jgm/pandoc#6031.
+  * Replace isBlank with isBreakable and improved startsWithBlank.
+    Previously isBlank was used in the layout algorithm where
+    what we really wanted was isBreakable.
+  * Avoid unnecessary calculation in updateColumns.
+  * Replace a right fold with a strict left fold.
+  * Add strictness annotations in realLength and updateColumn.
+
 ## 0.2.0.1
 
   * Made `realLength` smarter about combining characters.
