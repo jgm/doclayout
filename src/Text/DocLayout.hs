@@ -582,8 +582,8 @@ updateColumn (BlankLines _) _ = 0
 updateColumn d !k =
   case splitLines (render Nothing d) of
     []   -> k
-    [n]  -> k + realLength n
-    xs   -> realLength $ last xs
+    [t]  -> k + realLength t
+    ts   -> realLength $ last ts
 
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left.
