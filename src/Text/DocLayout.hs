@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP               #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -564,18 +565,18 @@ minOffset d = maximum (0 : map realLength (splitLines (render (Just 0) d)))
 -- | Returns the column that would be occupied by the last
 -- laid out character (assuming no wrapping).
 updateColumn :: HasChars a => Doc a -> Int -> Int
-updateColumn (Text n _) = (+ n)
-updateColumn (Block n _) = (+ n)
-updateColumn (VFill n _) = (+ n)
-updateColumn Empty = const 0
-updateColumn CarriageReturn = const 0
-updateColumn NewLine = const 0
-updateColumn (BlankLines _) = const 0
-updateColumn d =
-  case map realLength (splitLines (render Nothing d)) of
-    []  -> id
-    [n] -> (+ n)
-    xs  -> const (last xs)
+updateColumn (Text !n _) !k = k + n
+updateColumn (Block !n _) !k = k + n
+updateColumn (VFill !n _) !k = k + n
+updateColumn Empty _ = 0
+updateColumn CarriageReturn _ = 0
+updateColumn NewLine _ = 0
+updateColumn (BlankLines _) _ = 0
+updateColumn d !k =
+  case splitLines (render Nothing d) of
+    []   -> k
+    [n]  -> k + realLength n
+    xs   -> realLength $ last xs
 
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left.
