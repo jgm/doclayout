@@ -400,9 +400,9 @@ renderList (BreakingSpace : xs) = do
   let isBreakingSpace BreakingSpace = True
       isBreakingSpace _ = False
   let xs' = dropWhile isBreakingSpace xs
-  let next = takeWhile (not . isBlank) xs'
+  let next = takeWhile (not . isBreakable) xs'
   st <- get
-  let off = foldr ((+) . offsetOf) 0 next
+  let off = foldl' (\tot t -> tot + offsetOf t) 0 next
   case lineLength st of
         Just l | column st + 1 + off > l -> newline
         _  -> when (column st > 0) $ outp 1 " "
