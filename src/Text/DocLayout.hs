@@ -165,6 +165,7 @@ instance Monoid (Doc a) where
 
 instance HasChars a => IsString (Doc a) where
   fromString = text
+  {-# NOINLINE fromString #-}
 
 -- | Unfold a 'Doc' into a flat list.
 unfoldD :: Doc a -> [Doc a]
