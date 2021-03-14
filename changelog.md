@@ -1,5 +1,12 @@
 # doclayout
 
+## 0.3.0.1
+
+ * NOINLINE `fromString` (#1).
+   @sjakobi reports that this change reduced total allocations
+   for building pandoc-2.12 with GHC 8.10.4 by 8.5% and reduced
+   peak allocations are reduced from 3854MB to 3389MB.
+
 ## 0.3
 
   * Add foldlChar to signature of HasChars [API change].
