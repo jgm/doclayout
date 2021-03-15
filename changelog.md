@@ -1,5 +1,11 @@
 # doclayout
 
+## 0.3.0.2
+
+ * NOINLINE `literal` instead of `fromString` (#2, sjakobi).
+   This produces a further reduction in allocations and
+   pandoc compile time.
+
 ## 0.3.0.1
 
  * NOINLINE `fromString` (#1).
