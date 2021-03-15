@@ -165,7 +165,6 @@ instance Monoid (Doc a) where
 
 instance HasChars a => IsString (Doc a) where
   fromString = text
-  {-# NOINLINE fromString #-}
 
 -- | Unfold a 'Doc' into a flat list.
 unfoldD :: Doc a -> [Doc a]
@@ -489,6 +488,7 @@ literal x =
                     then Empty
                     else Text (realLength s) s) $
         splitLines x
+{-# NOINLINE literal #-}
 
 -- | A literal string.  (Like 'literal', but restricted to String.)
 text :: HasChars a => String -> Doc a
