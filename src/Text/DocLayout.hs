@@ -76,14 +76,16 @@ module Text.DocLayout (
 
 where
 import Prelude
-import Data.List (foldl')
 import Data.Maybe (fromMaybe)
+import Data.Monoid (Sum(..))
 import Safe (lastMay, initSafe)
 import Control.Monad
 import Control.Monad.State.Strict
 import GHC.Generics
-import Data.Char (isSpace)
-import Data.List (intersperse)
+import Data.Char (isSpace, ord)
+import Data.List (foldl', intersperse)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.IntMap.Strict as IM
 import Data.Data (Data, Typeable)
 import Data.String
 import qualified Data.Text as T
@@ -93,6 +95,7 @@ import Data.Text (Text)
 #else
 import Data.Semigroup
 #endif
+import Text.Emoji (emojis)
 
 -- | Class abstracting over various string types that
 -- can fold over characters.  Minimal definition is 'foldrChar'
@@ -676,58 +679,138 @@ doubleQuotes = inside (char '"') (char '"')
 -- | Returns width of a character in a monospace font:  0 for a combining
 -- character, 1 for a regular character, 2 for an East Asian wide character.
 charWidth :: Char -> Int
-charWidth c =
-  case c of
-      _ | c <  '\x0300'                    -> 1
-        | c >= '\x0300' && c <= '\x036F'   -> 0  -- combining
-        | c >= '\x0370' && c <= '\x10FC'   -> 1
-        | c >= '\x1100' && c <= '\x115F'   -> 2
-        | c >= '\x1160' && c <= '\x11A2'   -> 1
-        | c >= '\x11A3' && c <= '\x11A7'   -> 2
-        | c >= '\x11A8' && c <= '\x11F9'   -> 1
-        | c >= '\x11FA' && c <= '\x11FF'   -> 2
-        | c >= '\x1200' && c <= '\x2328'   -> 1
-        | c >= '\x2329' && c <= '\x232A'   -> 2
-        | c >= '\x232B' && c <= '\x2E31'   -> 1
-        | c >= '\x2E80' && c <= '\x303E'   -> 2
-        | c == '\x303F'                    -> 1
-        | c >= '\x3041' && c <= '\x3247'   -> 2
-        | c >= '\x3248' && c <= '\x324F'   -> 1 -- ambiguous
-        | c >= '\x3250' && c <= '\x4DBF'   -> 2
-        | c >= '\x4DC0' && c <= '\x4DFF'   -> 1
-        | c >= '\x4E00' && c <= '\xA4C6'   -> 2
-        | c >= '\xA4D0' && c <= '\xA95F'   -> 1
-        | c >= '\xA960' && c <= '\xA97C'   -> 2
-        | c >= '\xA980' && c <= '\xABF9'   -> 1
-        | c >= '\xAC00' && c <= '\xD7FB'   -> 2
-        | c >= '\xD800' && c <= '\xDFFF'   -> 1
-        | c >= '\xE000' && c <= '\xF8FF'   -> 1 -- ambiguous
-        | c >= '\xF900' && c <= '\xFAFF'   -> 2
-        | c >= '\xFB00' && c <= '\xFDFD'   -> 1
-        | c >= '\xFE00' && c <= '\xFE0F'   -> 1 -- ambiguous
-        | c >= '\xFE10' && c <= '\xFE19'   -> 2
-        | c >= '\xFE20' && c <= '\xFE26'   -> 1
-        | c >= '\xFE30' && c <= '\xFE6B'   -> 2
-        | c >= '\xFE70' && c <= '\xFEFF'   -> 1
-        | c >= '\xFF01' && c <= '\xFF60'   -> 2
-        | c >= '\xFF61' && c <= '\x16A38'  -> 1
-        | c >= '\x1B000' && c <= '\x1B001' -> 2
-        | c >= '\x1D000' && c <= '\x1F1FF' -> 1
-        | c >= '\x1F200' && c <= '\x1F251' -> 2
-        | c >= '\x1F300' && c <= '\x1F773' -> 1
-        | c >= '\x20000' && c <= '\x3FFFD' -> 2
-        | otherwise                        -> 1
+charWidth c = maybe 1 (specificWidth . snd) $ IM.lookupLE (ord c) unicodeWidthMap
 
 -- | Get real length of string, taking into account combining and double-wide
 -- characters.
 realLength :: HasChars a => a -> Int
-realLength s = fromMaybe 0 $ foldlChar go Nothing s
+realLength = extractLength . foldlChar go (MatchState True 0 0 mempty)
   where
-   -- Using a Maybe allows us to handle the case where the string
-   -- starts with a combining character.  Since there is no preceding
-   -- character, we count 0 width as 1 in this one case:
-   go Nothing !c =
-       case charWidth c of
-         0  -> Just 1
-         !n -> Just n
-   go (Just !tot) !c = Just (tot + charWidth c)
+    go (MatchState first tot _ Nothing) !c = case IM.lookupLE oc unicodeWidthMap of
+        -- If there is a specific match, record the tentative width, the map of
+        -- continuations, and move to the next character
+        Just (!oc', SpecificMatch r w m) | oc == oc' -> MatchState False tot (fromMaybe r w) (Just m)
+        -- If there is only a range match, record the total width and move to
+        -- the next character
+        Just (!_, !match) -> let r = rangeWidth match
+                                 -- If the string starts with a combining character.  Since there is no
+                                 -- preceding character, we count 0 width as 1 in this one case:
+                                 r' = if first && r == 0 then 1 else r
+                              in MatchState False (tot + r') 0 Nothing
+        -- M.lookupLE should not fail
+        Nothing -> MatchState False (tot + 1) 0 Nothing
+      where
+        oc = ord c
+    go (MatchState _ tot w (Just !m)) !c = case IM.lookup (ord c) m of
+        -- Continuations match, move to the next step with new continuations
+        Just (Emoji ew m') -> MatchState False tot ew (Just m')
+        -- No continuations match, use the tentative width and process c without continuations
+        Nothing -> go (MatchState False (tot + w) 0 Nothing) c
+
+    extractLength (MatchState _ tot w _) = tot + w
+
+-- | Keeps track of state in length calculations, determining whether we're at
+-- the first character, the width so far, the tentative width for this group,
+-- and the Map for possible emoji continuations.
+data MatchState = MatchState !Bool !Int !Int !(Maybe EmojiMap)
+
+-- | A possible match for unicode characters; either within a range block, or a
+-- specific match with a block range width, possibly a specific width, and a map of
+-- continuations.
+data UnicodeWidthMatch
+    = RangeSeparator !Int
+    | SpecificMatch !Int !(Maybe Int) !EmojiMap
+  deriving (Show)
+
+instance Semigroup UnicodeWidthMatch where
+    RangeSeparator w <> _ = RangeSeparator w
+    _ <> RangeSeparator w = RangeSeparator w
+    (SpecificMatch r w1 m1) <> (SpecificMatch _ w2 m2) = SpecificMatch r w $ concatEmojiMap m1 m2
+      where
+        w = getSum <$> (Sum <$> w1) <> (Sum <$> w2)
+
+-- | The width of the block in which the character lies, ignoring specific
+-- matches.
+rangeWidth :: UnicodeWidthMatch -> Int
+rangeWidth (RangeSeparator !r)    = r
+rangeWidth (SpecificMatch !r !_ !_) = r
+
+-- | The specific width of a character.
+specificWidth :: UnicodeWidthMatch -> Int
+specificWidth (RangeSeparator r)    = r
+specificWidth (SpecificMatch r w _) = fromMaybe r w
+
+-- | A map for looking up the width of Unicode text.
+unicodeWidthMap :: IM.IntMap UnicodeWidthMatch
+unicodeWidthMap = foldr (addEmoji . snd) unicodeRangeMap emojis
+
+-- | Denotes the contiguous ranges of Unicode characters which have a given
+-- width: 1 for a regular character, 2 for an East Asian wide character. Emoji
+-- have different widths and lie within some of these blocks. And the emoji
+-- will be added later.
+unicodeRangeMap :: IM.IntMap UnicodeWidthMatch
+unicodeRangeMap = IM.fromList $ map (\(c, x) -> (ord c, x))
+    [ ('\x0000', RangeSeparator 1)
+    , ('\x0300', RangeSeparator 0)  -- combining
+    , ('\x0370', RangeSeparator 1)
+    , ('\x1100', RangeSeparator 2)
+    , ('\x1160', RangeSeparator 1)
+    , ('\x11A3', RangeSeparator 2)
+    , ('\x11A8', RangeSeparator 1)
+    , ('\x11FA', RangeSeparator 2)
+    , ('\x1200', RangeSeparator 1)
+    , ('\x2329', RangeSeparator 2)
+    , ('\x232B', RangeSeparator 1)
+    , ('\x2E80', RangeSeparator 2)
+    , ('\x303F', RangeSeparator 1)
+    , ('\x3041', RangeSeparator 2)
+    , ('\x3248', RangeSeparator 1)  -- ambiguous
+    , ('\x3250', RangeSeparator 2)
+    , ('\x4DC0', RangeSeparator 1)
+    , ('\x4E00', RangeSeparator 2)
+    , ('\xA4D0', RangeSeparator 1)
+    , ('\xA960', RangeSeparator 2)
+    , ('\xA980', RangeSeparator 1)
+    , ('\xAC00', RangeSeparator 2)
+    , ('\xD800', RangeSeparator 1)
+    , ('\xE000', RangeSeparator 1)  -- ambiguous
+    , ('\xF900', RangeSeparator 2)
+    , ('\xFB00', RangeSeparator 1)
+    , ('\xFE00', RangeSeparator 1)  -- ambiguous
+    , ('\xFE10', RangeSeparator 2)
+    , ('\xFE20', RangeSeparator 1)
+    , ('\xFE30', RangeSeparator 2)
+    , ('\xFE70', RangeSeparator 1)
+    , ('\xFF01', RangeSeparator 2)
+    , ('\xFF61', RangeSeparator 1)
+    , ('\x1B000', RangeSeparator 2)
+    , ('\x1D000', RangeSeparator 1)
+    , ('\x1F200', RangeSeparator 2)
+    , ('\x1F300', RangeSeparator 1)
+    , ('\x20000', RangeSeparator 2)
+    , ('\x3FFFD', RangeSeparator 1)
+    ]
+
+type EmojiMap = IM.IntMap Emoji
+data Emoji = Emoji !Int !EmojiMap
+  deriving (Show)
+
+concatEmojiMap :: EmojiMap -> EmojiMap -> EmojiMap
+concatEmojiMap = IM.unionWith (\(Emoji w e1) (Emoji _ e2) -> Emoji w $ concatEmojiMap e1 e2)
+
+emojiToMatch :: IM.IntMap UnicodeWidthMatch -> NonEmpty Char -> UnicodeWidthMatch
+emojiToMatch m (x:|xs) = SpecificMatch r w $ emojiToMap xs
+  where
+    r = maybe 1 (rangeWidth . snd) $ IM.lookupLT (ord x) m
+    -- If it is a single code point emoji, it is of width 2. Otherwise, don't
+    -- overwrite the range width.
+    w = if null xs then Just 2 else Nothing
+
+addEmoji :: Text -> IM.IntMap UnicodeWidthMatch -> IM.IntMap UnicodeWidthMatch
+addEmoji !emoji !m = case T.unpack emoji of
+    []   -> m
+    x:xs -> IM.insertWith (<>) (ord x) (emojiToMatch m (x:|xs)) m
+
+emojiToMap :: String -> EmojiMap
+emojiToMap []     = mempty
+emojiToMap (x:xs) = IM.singleton (ord x) . Emoji 2 $ emojiToMap xs
