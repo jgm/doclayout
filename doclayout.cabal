@@ -23,6 +23,8 @@ library
   exposed-modules:     Text.DocLayout
   build-depends:       base >= 4.9 && < 5,
                        text,
+                       containers,
+                       emojis,
                        mtl,
                        safe
   if !impl(ghc >= 8.0)

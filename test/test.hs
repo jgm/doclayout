@@ -268,4 +268,25 @@ tests =
       Nothing
       (text "\870" <> space <> text "a")
       "\870 a"
+
+  , testCase "length of normal text" $
+      realLength ("This is going to be too long anyway" :: String) @?= 35
+
+  , testCase "length of normal character, which could be continued to an emoji, but isn't" $
+      realLength ("*a" :: String) @?= 2
+
+  , testCase "length of normal character, which could be continued to an emoji, and is" $
+      realLength ("*\xFE0F\x20E3\&a" :: String) @?= 3
+
+  , testCase "length emoji consisting of one code point" $
+      realLength ("\x231A" :: String) @?= 2
+
+  , testCase "length of emoji consisting of two code points" $
+      realLength ("\x00A9\xFE0F" :: String) @?= 2
+
+  , testCase "length of two emoji in a row" $
+      realLength ("\x1F170\xFE0F\x1F1E6\x1F1E8" :: String) @?= 4
+
+  , testCase "length of a long emoji with zero-width joiners" $
+      realLength ("\128065\65039\8205\128488\65039" :: String) @?= 2
   ]
