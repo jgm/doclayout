@@ -5,6 +5,7 @@
 import Text.DocLayout
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck
 import Data.Text (Text)
 #if MIN_VERSION_base(4,11,0)
 #else
@@ -289,4 +290,7 @@ tests =
 
   , testCase "length of a long emoji with zero-width joiners" $
       realLength ("\128065\65039\8205\128488\65039" :: String) @?= 2
+
+  , testProperty "shortcut provides same answer for string length" . withMaxSuccess 10000 $ \(x :: String) ->
+      realLength x === realLengthNoShortcut x
   ]
