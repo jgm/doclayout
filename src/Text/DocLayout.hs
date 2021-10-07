@@ -744,8 +744,13 @@ updateMatchStateNoShortcut (MatchState first tot _ Nothing) !c =
         Nothing -> MatchState False (tot + 1) 0 Nothing
   where
     oc = ord c
-updateMatchStateNoShortcut (MatchState _ tot w (Just !m)) !c =
-    case IM.lookup (ord c) m of
+updateMatchStateNoShortcut s@(MatchState _ tot w (Just !m)) !c
+    -- Skin tone modifiers modify the emoji up to this point, so can be discarded
+    | isEmojiModifier c = s
+    -- Zero width joiners will join two emoji together, so let's discard the state and parse the next emoji
+    | isEmojiJoiner c = MatchState False tot 2 Nothing
+    -- Otherwise, lookup the emoji continuations
+    | otherwise = case IM.lookup (ord c) m of
         -- Continuations match, move to the next step with new continuations
         Just (Emoji ew m') -> MatchState False tot ew (Just m')
         -- No continuations match, use the tentative width and process c without continuations
@@ -783,9 +788,20 @@ specificWidth :: UnicodeWidthMatch -> Int
 specificWidth (RangeSeparator r)    = r
 specificWidth (SpecificMatch r w _) = fromMaybe r w
 
+-- | Checks whether a character is an emoji modifier.
+isEmojiModifier :: Char -> Bool
+isEmojiModifier c = c >= '\x1F3FB' && c <= '\x1F3FF'
+
+-- | Checks whether a character is an emoji joiner.
+isEmojiJoiner :: Char -> Bool
+isEmojiJoiner c = c == '\x200D'
+
 -- | A map for looking up the width of Unicode text.
 unicodeWidthMap :: IM.IntMap UnicodeWidthMatch
-unicodeWidthMap = foldr (addEmoji . snd) unicodeRangeMap emojis
+unicodeWidthMap = foldr addEmoji unicodeRangeMap $ concatMap (splitEmoji . snd) emojis
+  where
+    -- Split an emoji sequence on zero-width joiners and discard skin tone modifiers
+    splitEmoji = T.split isEmojiJoiner . T.filter (not . isEmojiModifier)
 
 -- | Denotes the contiguous ranges of Unicode characters which have a given
 -- width: 1 for a regular character, 2 for an East Asian wide character. Emoji
