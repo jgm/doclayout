@@ -69,6 +69,7 @@ module Text.DocLayout (
      , height
      , charWidth
      , realLength
+     , realLengthNoShortcut
      -- * Types
      , Doc(..)
      , HasChars(..)
@@ -684,9 +685,51 @@ charWidth c = maybe 1 (specificWidth . snd) $ IM.lookupLE (ord c) unicodeWidthMa
 -- | Get real length of string, taking into account combining and double-wide
 -- characters.
 realLength :: HasChars a => a -> Int
-realLength = extractLength . foldlChar go (MatchState True 0 0 mempty)
+realLength = realLengthWith updateMatchState
+
+-- | Get real length of string, taking into account combining and double-wide
+-- characters, without taking any shortcuts. This should give the same answer
+-- as 'updateMatchState', but will be slower. It is here to test that the
+-- shortcuts are implemented correctly.
+realLengthNoShortcut :: HasChars a => a -> Int
+realLengthNoShortcut = realLengthWith updateMatchStateNoShortcut
+
+-- | Get real length of string, taking into account combining and double-wide
+-- characters, using the given accumulator.
+realLengthWith :: HasChars a => (MatchState -> Char -> MatchState) -> a -> Int
+realLengthWith f = extractLength . foldlChar f (MatchState True 0 0 mempty)
   where
-    go (MatchState first tot _ Nothing) !c = case IM.lookupLE oc unicodeWidthMap of
+    extractLength (MatchState _ tot w _) = tot + w
+
+-- | Update a 'MatchState' by processing a character.
+updateMatchState :: MatchState -> Char -> MatchState
+updateMatchState (MatchState first tot _ Nothing) !c
+    -- For efficiency, we isolate commonly used portions of the basic
+    -- multilingual plane that do not have emoji in them.
+    -- Maximum contiguous range containing ASCII alphabetic characters and no emoji
+    | c >= '\x003A' && c <= '\x00A8'                  = MatchState False (tot + 1) 0 Nothing
+    -- Remaining non-emoji ASCII characters
+    | c <= '\x002F' && c /= '\x0023' && c /= '\x002A' = MatchState False (tot + 1) 0 Nothing
+    -- Combining characters have width 0
+    | c >= '\x0300' && c <= '\x036F'                  = MatchState False (if first then tot + 1 else tot) 0 Nothing
+    -- A block of width 1
+    | c >= '\x0370' && c <= '\x10FC'                  = MatchState False (tot + 1) 0 Nothing
+    -- Hexagrams are width 1
+    | c >= '\x4DC0' && c <= '\x4DFF'                  = MatchState False (tot + 1) 0 Nothing
+    -- Maximum contiguous range of width 2 with no emoji containing CJK
+    | c >= '\x329a' && c <= '\xA4C6'                  = MatchState False (tot + 2) 0 Nothing
+    -- An ambiguous block; TODO: should be width 2 if surrounded by wide, 1 otherwise
+    | c >= '\x3248' && c <= '\x324F'                  = MatchState False (tot + 1) 0 Nothing
+    -- A width 1 straggler
+    | c == '\x303F'                                   = MatchState False (tot + 1) 0 Nothing
+updateMatchState s c = updateMatchStateNoShortcut s c
+
+-- | Update a 'MatchState' by processing a character, without taking any
+-- shortcuts. This should give the same answer as 'updateMatchState', but will
+-- be slower. It is here to test that the shortcuts are implemented correctly.
+updateMatchStateNoShortcut :: MatchState -> Char -> MatchState
+updateMatchStateNoShortcut (MatchState first tot _ Nothing) !c =
+    case IM.lookupLE oc unicodeWidthMap of
         -- If there is a specific match, record the tentative width, the map of
         -- continuations, and move to the next character
         Just (!oc', SpecificMatch r w m) | oc == oc' -> MatchState False tot (fromMaybe r w) (Just m)
@@ -699,15 +742,15 @@ realLength = extractLength . foldlChar go (MatchState True 0 0 mempty)
                               in MatchState False (tot + r') 0 Nothing
         -- M.lookupLE should not fail
         Nothing -> MatchState False (tot + 1) 0 Nothing
-      where
-        oc = ord c
-    go (MatchState _ tot w (Just !m)) !c = case IM.lookup (ord c) m of
+  where
+    oc = ord c
+updateMatchStateNoShortcut (MatchState _ tot w (Just !m)) !c =
+    case IM.lookup (ord c) m of
         -- Continuations match, move to the next step with new continuations
         Just (Emoji ew m') -> MatchState False tot ew (Just m')
         -- No continuations match, use the tentative width and process c without continuations
-        Nothing -> go (MatchState False (tot + w) 0 Nothing) c
-
-    extractLength (MatchState _ tot w _) = tot + w
+        -- I guess we use shortcuts here; that's probably fine.
+        Nothing -> updateMatchState (MatchState False (tot + w) 0 Nothing) c
 
 -- | Keeps track of state in length calculations, determining whether we're at
 -- the first character, the width so far, the tentative width for this group,
