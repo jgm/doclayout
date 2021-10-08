@@ -3,10 +3,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 import Text.DocLayout
+import Text.Emoji
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.QuickCheck
+import Data.Functor ((<&>))
 import Data.Text (Text)
+import qualified Data.Text as T
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup
@@ -282,15 +285,27 @@ tests =
   , testCase "length emoji consisting of one code point" $
       realLength ("\x231A" :: String) @?= 2
 
-  , testCase "length of emoji consisting of two code points" $
+  , testCase "length of an emoji constructed using the variating modifier" $
       realLength ("\x00A9\xFE0F" :: String) @?= 2
+
+  , testCase "length of a non-emoji which would be an emoji with a variation modifier" $
+      realLength ("\x00A9" :: String) @?= 1
 
   , testCase "length of two emoji in a row" $
       realLength ("\x1F170\xFE0F\x1F1E6\x1F1E8" :: String) @?= 4
 
-  , testCase "length of a long emoji with zero-width joiners" $
-      realLength ("\128065\65039\8205\128488\65039" :: String) @?= 2
+  , testCase "length of an emoji with skin tone modifier, where stripping results in a non-emoji" $
+      realLength ("\x1F590\x1F3FF" :: String) @?= 2
 
-  , testProperty "shortcut provides same answer for string length" . withMaxSuccess 10000 $ \(x :: String) ->
-      realLength x === realLengthNoShortcut x
+  , testCase "a digit with a skin tone modifier is invalid but might appear, and shouldn't be mistaken for a variation modifier" $
+      realLength ("1\x1F3FF" :: String) @?= 3
+
+  , testGroup "all base emoji have width 2" $
+      baseEmojis <&> \emoji -> testCase (T.unpack emoji) $ realLength emoji @?= 2
+
+  , testGroup "all zero-width joiner emoji sequences have width 2" $
+      zwjEmojis <&> \emoji -> testCase (T.unpack emoji) $ realLength emoji @?= 2
+
+  , testProperty "shortcut provides same answer for string length" . withMaxSuccess 1000000 $
+      \(x :: String) -> realLength x === realLengthNoShortcut x
   ]

@@ -70,6 +70,9 @@ module Text.DocLayout (
      , charWidth
      , realLength
      , realLengthNoShortcut
+     , isEmojiModifier
+     , isEmojiVariation
+     , isEmojiJoiner
      -- * Types
      , Doc(..)
      , HasChars(..)
@@ -83,7 +86,7 @@ import Safe (lastMay, initSafe)
 import Control.Monad
 import Control.Monad.State.Strict
 import GHC.Generics
-import Data.Char (isSpace, ord)
+import Data.Char (isDigit, isSpace, ord)
 import Data.List (foldl', intersperse)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.IntMap.Strict as IM
@@ -96,7 +99,7 @@ import Data.Text (Text)
 #else
 import Data.Semigroup
 #endif
-import Text.Emoji (emojis)
+import Text.Emoji (baseEmojis)
 
 -- | Class abstracting over various string types that
 -- can fold over characters.  Minimal definition is 'foldrChar'
@@ -707,9 +710,7 @@ updateMatchState (MatchState first tot _ Nothing) !c
     -- For efficiency, we isolate commonly used portions of the basic
     -- multilingual plane that do not have emoji in them.
     -- Maximum contiguous range containing ASCII alphabetic characters and no emoji
-    | c >= '\x003A' && c <= '\x00A8'                  = MatchState False (tot + 1) 0 Nothing
-    -- Remaining non-emoji ASCII characters
-    | c <= '\x002F' && c /= '\x0023' && c /= '\x002A' = MatchState False (tot + 1) 0 Nothing
+    | c <= '\x00A8'                                   = MatchState False (tot + 1) 0 Nothing
     -- Combining characters have width 0
     | c >= '\x0300' && c <= '\x036F'                  = MatchState False (if first then tot + 1 else tot) 0 Nothing
     -- A block of width 1
@@ -744,9 +745,11 @@ updateMatchStateNoShortcut (MatchState first tot _ Nothing) !c =
         Nothing -> MatchState False (tot + 1) 0 Nothing
   where
     oc = ord c
-updateMatchStateNoShortcut s@(MatchState _ tot w (Just !m)) !c
-    -- Skin tone modifiers modify the emoji up to this point, so can be discarded
-    | isEmojiModifier c = s
+updateMatchStateNoShortcut (MatchState _ tot w (Just !m)) !c
+    -- Skin tone modifiers and variation modifiers modify the emoji up to this
+    -- point, so can be discarded. However, they always make it width 2, so we
+    -- set the tentative width to 2.
+    | isEmojiModifier c || isEmojiVariation c = MatchState False tot 2 (Just m)
     -- Zero width joiners will join two emoji together, so let's discard the state and parse the next emoji
     | isEmojiJoiner c = MatchState False tot 2 Nothing
     -- Otherwise, lookup the emoji continuations
@@ -766,16 +769,15 @@ data MatchState = MatchState !Bool !Int !Int !(Maybe EmojiMap)
 -- specific match with a block range width, possibly a specific width, and a map of
 -- continuations.
 data UnicodeWidthMatch
-    = RangeSeparator !Int
-    | SpecificMatch !Int !(Maybe Int) !EmojiMap
+    = RangeSeparator !Int                         -- This code point marks the boundary of a range
+    | SpecificMatch !Int !(Maybe Int) !EmojiMap   -- This code point has a specific emoji with continuations
   deriving (Show)
 
 instance Semigroup UnicodeWidthMatch where
-    RangeSeparator w <> _ = RangeSeparator w
-    _ <> RangeSeparator w = RangeSeparator w
     (SpecificMatch r w1 m1) <> (SpecificMatch _ w2 m2) = SpecificMatch r w $ concatEmojiMap m1 m2
       where
         w = getSum <$> (Sum <$> w1) <> (Sum <$> w2)
+    s <> _ = s
 
 -- | The width of the block in which the character lies, ignoring specific
 -- matches.
@@ -788,9 +790,13 @@ specificWidth :: UnicodeWidthMatch -> Int
 specificWidth (RangeSeparator r)    = r
 specificWidth (SpecificMatch r w _) = fromMaybe r w
 
--- | Checks whether a character is an emoji modifier.
+-- | Checks whether a character is a skin tone modifier
 isEmojiModifier :: Char -> Bool
 isEmojiModifier c = c >= '\x1F3FB' && c <= '\x1F3FF'
+
+-- | Checks whether a character is an emoji variation modifier.
+isEmojiVariation :: Char -> Bool
+isEmojiVariation c = c == '\xFE0F'
 
 -- | Checks whether a character is an emoji joiner.
 isEmojiJoiner :: Char -> Bool
@@ -798,10 +804,13 @@ isEmojiJoiner c = c == '\x200D'
 
 -- | A map for looking up the width of Unicode text.
 unicodeWidthMap :: IM.IntMap UnicodeWidthMatch
-unicodeWidthMap = foldr addEmoji unicodeRangeMap $ concatMap (splitEmoji . snd) emojis
+unicodeWidthMap =
+    foldr addEmoji unicodeRangeMap
+    . filter (maybe True (not . isKeypad . fst) . T.uncons)  -- Keypad emoji can be handles by base rules
+    $ filter (not . T.any isEmojiModifier)                   -- Emoji modifiers are inferred from the base emoji
+    baseEmojis
   where
-    -- Split an emoji sequence on zero-width joiners and discard skin tone modifiers
-    splitEmoji = T.split isEmojiJoiner . T.filter (not . isEmojiModifier)
+    isKeypad c = isDigit c || c == '*' || c == '#'
 
 -- | Denotes the contiguous ranges of Unicode characters which have a given
 -- width: 1 for a regular character, 2 for an East Asian wide character. Emoji
@@ -818,6 +827,14 @@ unicodeRangeMap = IM.fromList $ map (\(c, x) -> (ord c, x))
     , ('\x11A8', RangeSeparator 1)
     , ('\x11FA', RangeSeparator 2)
     , ('\x1200', RangeSeparator 1)
+    , ('\x1AB0', RangeSeparator 0)  -- combining
+    , ('\x1B00', RangeSeparator 1)
+    , ('\x1DC0', RangeSeparator 0)  -- combining
+    , ('\x1E00', RangeSeparator 1)
+    , ('\x200B', RangeSeparator 0)  -- zero-width characters and directional overrides
+    , ('\x2030', RangeSeparator 1)  -- combining
+    , ('\x20D0', RangeSeparator 0)  -- combining
+    , ('\x2100', RangeSeparator 1)
     , ('\x2329', RangeSeparator 2)
     , ('\x232B', RangeSeparator 1)
     , ('\x2E80', RangeSeparator 2)
@@ -837,7 +854,7 @@ unicodeRangeMap = IM.fromList $ map (\(c, x) -> (ord c, x))
     , ('\xFB00', RangeSeparator 1)
     , ('\xFE00', RangeSeparator 1)  -- ambiguous
     , ('\xFE10', RangeSeparator 2)
-    , ('\xFE20', RangeSeparator 1)
+    , ('\xFE20', RangeSeparator 0)  -- combining
     , ('\xFE30', RangeSeparator 2)
     , ('\xFE70', RangeSeparator 1)
     , ('\xFF01', RangeSeparator 2)
@@ -846,6 +863,8 @@ unicodeRangeMap = IM.fromList $ map (\(c, x) -> (ord c, x))
     , ('\x1D000', RangeSeparator 1)
     , ('\x1F200', RangeSeparator 2)
     , ('\x1F300', RangeSeparator 1)
+    , ('\x1F3FB', RangeSeparator 2)  -- skin tone modifiers
+    , ('\x1F400', RangeSeparator 1)
     , ('\x20000', RangeSeparator 2)
     , ('\x3FFFD', RangeSeparator 1)
     ]
@@ -858,7 +877,7 @@ concatEmojiMap :: EmojiMap -> EmojiMap -> EmojiMap
 concatEmojiMap = IM.unionWith (\(Emoji w e1) (Emoji _ e2) -> Emoji w $ concatEmojiMap e1 e2)
 
 emojiToMatch :: IM.IntMap UnicodeWidthMatch -> NonEmpty Char -> UnicodeWidthMatch
-emojiToMatch m (x:|xs) = SpecificMatch r w $ emojiToMap xs
+emojiToMatch m (x:|xs) = SpecificMatch r w . emojiToMap $ filter (not . isEmojiVariation) xs
   where
     r = maybe 1 (rangeWidth . snd) $ IM.lookupLT (ord x) m
     -- If it is a single code point emoji, it is of width 2. Otherwise, don't
