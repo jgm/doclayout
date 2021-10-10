@@ -1,7 +1,8 @@
 resolver: lts-18.10
 packages:
 - '.'
-extra-deps: []
+extra-deps:
+- emojis-0.1.2
 flags: {}
 extra-package-dbs: []
 ghc-options:
