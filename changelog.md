@@ -1,5 +1,15 @@
 # doclayout
 
+## 0.3.1
+
+  * Improved handling of emojis.  Emojis are double-wide, but
+    previously this library did not treat them as such.  We now
+    have comprehensive support of emojis, including variation
+    modifiers and zero-width joiners, verified by a test suite.
+    Performance has been confirmed to be no worse for text without emojis.
+    (Stephen Morgan, #1).  API changes: export `realLengthNoShortcut`,
+    `isEmojiModifier`, `isEmojiVariation`, `isEmojiJoiner`.
+
 ## 0.3.0.2
 
  * NOINLINE `literal` instead of `fromString` (#2, sjakobi).
