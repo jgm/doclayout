@@ -1,5 +1,12 @@
 # doclayout
 
+## 0.3.1.1
+
+  * Fix the end of the block of zero width characters which contains
+    the zero-width joiners and directional markings (Stephen Morgan, #5).
+    This fixes a regression introduced in 0.3.1, affecting code
+    points 0x2010 to 0x2030.
+
 ## 0.3.1
 
   * Improved handling of emojis.  Emojis are double-wide, but
