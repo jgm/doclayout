@@ -832,7 +832,7 @@ unicodeRangeMap = IM.fromList $ map (\(c, x) -> (ord c, x))
     , ('\x1DC0', RangeSeparator 0)  -- combining
     , ('\x1E00', RangeSeparator 1)
     , ('\x200B', RangeSeparator 0)  -- zero-width characters and directional overrides
-    , ('\x2030', RangeSeparator 1)  -- combining
+    , ('\x2010', RangeSeparator 1)
     , ('\x20D0', RangeSeparator 0)  -- combining
     , ('\x2100', RangeSeparator 1)
     , ('\x2329', RangeSeparator 2)
