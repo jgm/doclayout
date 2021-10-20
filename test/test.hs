@@ -276,6 +276,12 @@ tests =
   , testCase "length of normal text" $
       realLength ("This is going to be too long anyway" :: String) @?= 35
 
+  , testCase "length of an ambiguous character in normal context" $
+      realLength ("Circle\x25EF\&Circle" :: String) @?= 13
+
+  , testCase "length of an ambiguous character in wide context" $
+      realLengthWideContext ("圆\x25EF\&圆" :: String) @?= 6
+
   , testCase "length of normal character, which could be continued to an emoji, but isn't" $
       realLength ("*a" :: String) @?= 2
 
