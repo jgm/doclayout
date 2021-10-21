@@ -55,7 +55,9 @@ benchmark doclayout-bench
   Build-Depends:   doclayout,
                    base >= 4.8 && < 5,
                    criterion >= 1.0 && < 1.6,
+                   deepseq,
                    text,
+                   emojis >= 0.1.2,
                    mtl
   Ghc-Options:   -rtsopts -Wall -fno-warn-unused-do-bind
   Default-Language: Haskell2010

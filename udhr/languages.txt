@@ -1,0 +1,372 @@
+abk	Abkhaz
+atj	Achehnese
+jiv	Achuar Chicham
+acu	Achuar-Shiwiar
+aja	Adja
+gax	Afaan Oromo (Oromiffa)
+afk	Afrikaans
+agr	Aguaruna
+ccc	A'ingae
+tws1	Akuapem Twi
+aln	Albanian
+alt	Altay
+amc	Amahuaca
+amr	Amarakaeri 
+amh	Amharic
+ame	Amuesha-Yanesha
+arl	Arabela
+arz	Arabic (Alarabia)
+arm	Armenian
+ass	Asante 
+cni	Ashàninca
+cpu	Ashéninca
+asm	Assamese
+aii	Assyrian (Atoraya)
+aub	Asturian (Bable)
+kwi	Awapit
+aym	Aymara
+azb1	Azeri/Azerbaijani (Cyrillic)
+azb	Azeri/Azerbaijani (Latin)
+inz	Bahasa Indonesia
+mli	Bahasa Melayu (Malay)
+1121	Bai Coca
+bvi	Balanda Viri
+bzc	Balinese
+bgp	Balochi
+bra	Bambara
+bci	Baoulé/Baule
+bfa	Bari
+bsq	Basque (Euskara)
+bba	Batonu (Bariba)
+ruw	Belorus (Belaruski)
+bem	Bemba
+bng	Bengali
+btb	Béti
+bhj	Bhojpuri
+bcy	Bichelamar
+bkl	Bikol/Bicolano
+boa	Bora
+src4	Bosnian (Cyrillic script)
+src1	Bosnian (Latin script)
+brt	Breton
+bpr	Bugisnese
+blg	Bulgarian (Balgarski)
+bms	Burmese/Myanmar
+cak1	Cakchiquel
+cpp	Campa pajonalino
+cbu	Candoshi-Shapra
+cot	Caquinte
+cbr	Cashibo-Cacataibo
+cbs	Cashinahua
+cln	Catalan (Català)
+ceb	Cebuano
+1122	Chaa'pala
+cjd	Chamorro
+tso	Changane (Mozambique)
+cbt	Chayahuita
+nyj1	Chechewa (Nyanja)
+cic	Chickasaw
+csa	Chinanteco
+chj	Chinanteco, Ajitlán
+chn	Chinese (Mandarin)
+fal	Chin Falam
+hak	Chin Hakha
+tid	Chin Tiddim
+tru1	Chuuk (Trukese)
+cjk	Cokwe
+coi	Corsican
+kea	Crioulo (Cabo Verde)
+gbc	Crioulo da Guiné-Bissau (Guinea Bissau Creole)
+src2	Croatian
+wls	Cymraeg (Welsh)
+czc	Czech (Cesky)
+dga	Dagaare
+dag	Dagbani
+gac1	Dangme
+dns	Danish (Dansk)
+prs1	Dari
+den	Dendi
+ger	Deutsch (German)
+div	Dhivehi (Maldivian)
+nav	Dine, Navajo (Navaho)
+dinka	Dinka
+dyo	Diola (Jola-Fogny)
+tbz	Ditammari
+dut	Dutch (Nederlands)
+dzo	Dzongkha/Bhutanese 
+edo	Edo
+ibb	Efik (Ibibio)
+grk	Ellinika' (Greek)
+eng	English
+spn	Español (Spanish)
+1115	Esperanto
+est	Estonian (Eesti)
+eve	Even
+evn	Evenki
+ewe	Ewe/Eve
+tws3	Fante
+fae	Faroese
+prs	Farsi/Persian
+fji	Fijian
+tgl	Filipino (Tagalog)
+fin	Finnish
+kng	Fiote (Angola)
+foa	Fon
+1128	Forro
+frn	French (Français)
+fri	Frisian
+frl	Friulian (Friulano)
+gac2	Ga
+gli1	Gaeilge (Irish Gaelic)
+gag	Gagauz
+gls	Gàidhlig Albanach (Scottish Gaelic)
+gln	Galician (Galego)
+cab	Garifuna
+geo	Georgian
+dum	Gonja 
+esg	Greenlandic (Inuktikut)
+gun	Guarani
+gua	Guarayo
+hna	Guen (Mina)
+gjr	Gujarati
+hat	Haitian Creole (Kreyol)
+hat1	Haitian Creole (popular)
+hni	Hani
+kkn	Hankuko (Korean)
+gej	Hausa/Haoussa
+hwi	Hawaiian
+hbr	Hebrew
+hil	Hiligaynon
+hnd	Hindi
+hea	Hmong (Miao) Northern East-Guizhou
+blu	Hmong (Miao), Sichuan-Guizhou-Yunnan
+hms	Hmong (Miao) Southern East-Guizhou
+hva	Huasteco
+huu	Huitoto Murui
+hng	Hungarian
+ice	Icelandic (Yslenska)
+1120	Ido
+igr	Igbo
+ilo	Iloko/Ilocano
+1119	Interlingua
+esb	Inuktitut
+itn	Italian
+jpn	Japanese (Nihongo)
+jan	Javanese
+maz	Jñatrjo (Mazahua)
+kbp	Kabyè
+kjv	Kannada
+kph	Kanuri Yerwa
+kqn	Kaonde
+pmp	Kapampangan
+krl	Karelian
+pwo	Karen (Pwo)
+ksw	Karen (S'gaw)
+kas	Kasem
+ksh	Kashmiri
+kaz	Kazakh
+kjh	Khakas
+khk	Khalkha (Mongolian)
+khm	Khmer
+1117	K'iche' (Quiché)
+qug	Kichwa
+kon	Kikongo ya L'Etat (Kikongo/Kituba)
+mlo	Kimbundu
+nyz	Kinyamwezi (Nyamwezi)
+rua1	Kinyarwanda
+gkp1	Kpelewo
+kri	Krio
+kdb1	Kurdish
+kur	Kurmanji
+kdo	Kyrgyz
+nso	Lamnso' (Lám nso')
+nol	Lao
+ltn1	Latin (Latina)
+ltn	Latin (Latina)
+lat	Latvian
+lia	Limba
+lin	Lingala
+lit	Lithuanian (Lietuviskai)
+lbm1	Lozi
+lub	Luba-Kasai (Tshiluba)
+lap1	Luganda/Ganda
+mlo1	Lunda/Chokwe-lunda
+lue	Luvale
+lux	Luxembourgish (Lëtzebuergeusch)
+mkj	Macedonian
+mhj	Madurese
+mqm	Magahi
+kde	Makonde
+vmw	Makua (Mozambique)
+mex	Malagasy
+mjs	Malayalam
+mls	Maltese
+mam	Mam
+mni	Maninka
+mbf	Maori
+rrt	Maori (Cook Islands) (Rarotongan)
+aru	Mapudungun (Mapuzgun)
+mrt	Marathi
+mzm	Marshallese
+mkd	Marwari
+mcf	Matsés
+yua	Mayan (Yucateco)
+mao	Mazateco
+mfy	Mende
+mic	Mikmaq/Micmac
+mpu	Minangkabau
+miq	Miskito
+mxv	Mixteco
+mhm	Mooré/More
+moz	Mozarabic (Ajami)
+1111	Ñahñú (Otomí)
+nhn	Nahuatl
+nel	Ndebele
+yrk	Nenets
+nep	Nepali
+nio	Nganasan
+nba	Ngangela (Nyemba)
+pcm	Nigerian Pidgin English
+not	Nomatsiguenga
+srt	Northern Sotho/Pedi/Sepedi
+nrr	Norwegian (Bokmål) (Norsk, Bokmål)
+nrn	Norwegian (Nynorsk) (Norsk, Nynorsk)
+nus	Nuer
+nyj	Nyanja/Chinyanja
+nze	Nzema
+auv1	Occitan Auvergnat
+prv1	Occitan Languedocien
+ojb	Ojibway (Ojibwe)
+ory	Oriya
+ose	Osetin (Ossetian)
+1114	Oshiwambo (Ndonga)
+lot	Otuho
+pbb	Paez
+1123	Pai Koka
+plu	Palauan
+pbu	Pashto/Pakhto
+fum	Peuhl
+frn2	Picard
+pis	Pijin (Solomons Pidgin)
+ppl	Pipil
+pql	Polish (Polski)
+pnf	Ponapean
+por	Portuguese
+pro	Provençal
+fum1	Pulaar
+pnj1	Punjabi/Panjabi
+1112	Purhépecha
+1116	Q'echi/Kekchi
+qec1	Quechua
+qeg	Quechua de Ambo-Pasco
+quy	Quechua de Ayacucho
+qnt	Quechua de Cajamarca
+qar	Quechua de Cotahuasi (Arequipa)
+qej	Quechua de Huamalies (Huanuco)
+qan	Quechua del Callejon de Huaylas
+quz	Quechua del Cusco
+qju	Quechua del Norte de Junin
+qei	Quechua de Margos (Sur de Dios de Mayo, Huanuco)
+qed	Quechua de Pomabamba (Ancash)
+qud1	Quichua
+rhe	Rhaeto-Romance (Rumantsch)
+rmn1	Romani
+rum	Romanian (Româna)
+koo1	Rukonzo (Konjo)
+rud1	Rundi/Kirundi
+nyn1	Runyankore-rukiga/Nkore-kiga
+rus	Russian (Russky)
+lpi	Sami/Lappish
+eml	Sammarinese
+smy	Samoan
+saj	Sango (Sangho)
+skt	Sanskrit
+1124	Sapara Atupama
+skr	Saraiki
+srd	Sardinian
+sco	Scots
+ses	Seereer
+src5	Serbian (Cyrillic) (Srpski)
+src3	Serbian (Latin) (Srpski)
+crs	Seselwa Creole French
+sjn	Shan
+mcd	Sharanahua
+shk	Shilluk
+shp	Shipibo-Conibo
+shd	Shona
+cjs	Shor
+1125	Shuar Chicham
+1126	Sia Pedee
+snd	Sindhi
+snh	Sinhala
+swz1	Siswati
+slo	Slovak (Slovencina)
+slv	Slovenian (Slovenscina)
+som	Somali
+snn	Soninké (Soninkanxaane)
+wee	Sorbian
+sso	Southern Sotho/Sotho/Sesotho/Sutu/Sesutu
+sua	Sukuma
+suo	Sundanese
+sud	Sussu/Soussou/Sosso/Soso/Susu
+swa	Swahili/Kiswahili
+crm	Swampy Cree
+swd	Swedish (Svenska)
+tht	Tahitian
+pet	Tajik
+taj	Tamang (Tam)
+tzm	Tamazight (Beraber)
+tcv	Tamil
+ttr	Tatar
+tcw	Telugu
+1118	Tének (Huasteco)
+ttm	Tetum
+thj	Thai
+tej	Themne (Temne)
+tic	Tibetan
+tca	Ticuna
+tgn	Tigrinya (Tigrigna)
+tiv	Tiv
+tob	Toba
+toj	Tojol-a'b'al
+pdg	Tok Pisin
+toi	Tonga
+tov	Tongan (Tonga)
+top	Totonaco
+cof	Tsafiki
+tsh	Tshivenda
+trk	Turkish (Türkçe)
+tck	Turkmen
+tyv	Tuvan
+tzc1	Tzeltal
+tzc	Tzotzil
+uig	Uighur
+ukr	Ukrainian (Ukrayins'ka)
+mnf	Umbundu
+ura	Urarina
+urd	Urdu
+uzb1	Uzbek (Cyrillic)
+uzb	Uzbek (Latin)
+vep	Veps
+vie	Vietnamese
+rmy1	Vlach
+frn1	Walloon/Wallon
+ako	Wama
+1127	Wao Tededo
+wry	Waray
+guc	Wayuu
+tsw	Western Sotho/Tswana/Setswana
+wol	Wolof
+xos	Xhosa
+yad	Yagua
+sah	Yakut
+yao	Yao
+yps	Yapese
+iii	Yi
+ydd	Yiddish
+yor	Yoruba (Yorùbá)
+ykg	Yukagir
+zam	Zapoteco
+ztu1	Zapoteco, San Lucas Quiaviní
+ccx	Zhuang
+zuu	Zulu
