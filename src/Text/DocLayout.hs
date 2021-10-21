@@ -69,9 +69,10 @@ module Text.DocLayout (
      , height
      , charWidth
      , realLength
+     , realLengthNarrowContext
      , realLengthWideContext
      , realLengthNoShortcut
-     , isEmojiModifier
+     , isSkinToneModifier
      , isEmojiVariation
      , isEmojiJoiner
      -- * Types
@@ -83,9 +84,11 @@ where
 import Prelude
 import Data.Maybe (fromMaybe)
 import Safe (lastMay, initSafe)
+import Control.Applicative ((<|>))
 import Control.Monad
 import Control.Monad.State.Strict
 import GHC.Generics
+import Data.Bifunctor (bimap)
 import Data.Char (isDigit, isSpace, ord)
 import Data.List (foldl', intersperse)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -100,6 +103,7 @@ import Data.Text (Text)
 import Data.Semigroup
 #endif
 import Text.Emoji (baseEmojis)
+
 
 -- | Class abstracting over various string types that
 -- can fold over characters.  Minimal definition is 'foldrChar'
@@ -684,29 +688,37 @@ doubleQuotes = inside (char '"') (char '"')
 -- character, 1 for a regular character, 2 for an East Asian wide character.
 -- Ambiguous characters are treated as width 1.
 charWidth :: Char -> Int
-charWidth c = maybe 1 (resolveAmbiguous 1 . specificWidth . snd) $ IM.lookupLE (ord c) unicodeWidthMap
+charWidth c = maybe 1 (resolveWidth 1 . specificWidth . snd) $ IM.lookupLE (ord c) unicodeWidthMap
 
 -- | Get real length of string, taking into account combining and double-wide
 -- characters. Ambiguous characters are treated as width 1.
 realLength :: HasChars a => a -> Int
-realLength = realLengthWith $ updateMatchState 1
+realLength = realLengthNarrowContext
+
+-- | Get the real length of a string, taking into account combining and
+-- double-wide characters. Ambiguous characters are treated as width 1.
+realLengthNarrowContext :: HasChars a => a -> Int
+realLengthNarrowContext = realLengthWith . updateMatchState $ resolveWidth 1
 
 -- | Get the real length of a string, taking into account combining and
 -- double-wide characters. Ambiguous characters are treated as width 2.
 realLengthWideContext :: HasChars a => a -> Int
-realLengthWideContext = realLengthWith $ updateMatchState 2
+realLengthWideContext = realLengthWith . updateMatchState $ resolveWidth 2
 
 -- | Get real length of string, taking into account combining and double-wide
 -- characters, without taking any shortcuts. This should give the same answer
 -- as 'updateMatchState', but will be slower. It is here to test that the
 -- shortcuts are implemented correctly. Ambiguous characters are treated as width 1.
 realLengthNoShortcut :: HasChars a => a -> Int
-realLengthNoShortcut = realLengthWith $ updateMatchStateNoShortcut 1
+realLengthNoShortcut = realLengthWith . updateMatchStateNoShortcut $ resolveWidth 1
 
 -- | Resolve ambiguous characters based on their context.
-resolveAmbiguous :: Int -> Width -> Int
-resolveAmbiguous _ (AbsoluteWidth w) = w
-resolveAmbiguous c Ambiguous         = c
+resolveWidth :: Int -> UnicodeWidth -> Int
+resolveWidth _ Narrow    = 1
+resolveWidth _ Wide      = 2
+resolveWidth _ Combining = 0
+resolveWidth _ Control   = 0
+resolveWidth c Ambiguous = c
 
 -- | Get real length of string, taking into account combining and double-wide
 -- characters, using the given accumulator.
@@ -717,36 +729,46 @@ realLengthWith f = extractLength . foldlChar f (MatchState True 0 Nothing mempty
     extractLength (MatchState _ tot (Just w) _) = tot + w
 
 -- | Update a 'MatchState' by processing a character.
-updateMatchState :: Int -> MatchState -> Char -> MatchState
-updateMatchState ambiguousWidth (MatchState first tot _ Nothing) !c
-    -- For efficiency, we isolate commonly used portions of the basic
-    -- multilingual plane that do not have emoji in them.
+-- For efficiency, we isolate commonly used portions of the basic
+-- multilingual plane that do not have emoji in them.
+updateMatchState :: (UnicodeWidth -> Int) -> MatchState -> Char -> MatchState
+updateMatchState resolve (MatchState first tot _ Nothing) !c
+    -- Control characters have width 0: friends don't let friends use tabs
+    | c <= '\x001F'                     = controlState
+    | c >= '\x007F' && c <= '\x009F'    = controlState
     -- Maximum contiguous range containing ASCII alphabetic characters and no emoji
-    | c <= '\x00A8'                                   = MatchState False (tot + 1) Nothing Nothing
+    | c <= '\x00A8' && not (isKeypad c) = narrowState
+    -- Maximum contiguous range of width 2 containing CJK
+    | c >= '\x4DC0' && c <= '\x4DFF'    = narrowState     -- Hexagrams
+    | c >= '\x3250' && c <= '\xA4C6'    = wideState       -- Han ideographs
+    -- Hiragana and katakana
+    | c >= '\x3099' && c <= '\x309A'    = combiningState  -- Combining
+    | c == '\x303F'                     = narrowState     -- Half-fill space
+    | c >= '\x3030' && c <= '\x3247'    = wideState       -- Hiragana and Katakana
+    | c >= '\x3248' && c <= '\x324F'    = ambiguousState  -- Circled numbers
     -- Combining characters have width 0
-    | c >= '\x0300' && c <= '\x036F'                  = MatchState False (if first then tot + 1 else tot) Nothing Nothing
-    -- A block of width 1
-    | c >= '\x0370' && c <= '\x10FC'                  = MatchState False (tot + 1) Nothing Nothing
-    -- Hexagrams are width 1
-    | c >= '\x4DC0' && c <= '\x4DFF'                  = MatchState False (tot + 1) Nothing Nothing
-    -- Maximum contiguous range of width 2 with no emoji containing CJK
-    | c >= '\x329a' && c <= '\xA4C6'                  = MatchState False (tot + 2) Nothing Nothing
-    -- An ambiguous block; TODO: should be width 2 if surrounded by wide, 1 otherwise
-    | c >= '\x3248' && c <= '\x324F'                  = MatchState False (tot + ambiguousWidth) Nothing Nothing
-    -- A width 1 straggler
-    | c == '\x303F'                                   = MatchState False (tot + 1) Nothing Nothing
-updateMatchState ambiguousWidth s c = updateMatchStateNoShortcut ambiguousWidth s c
+    | c >= '\x0300' && c <= '\x036F'    = combiningState
+    | c >= '\x0483' && c <= '\x0489'    = combiningState
+    | c >= '\x0591' && c <= '\x05BD'    = combiningState
+    | c == '\x05BF'                     = combiningState
+  where
+    narrowState    = MatchState False (tot + 1) Nothing Nothing
+    wideState      = MatchState False (tot + 2) Nothing Nothing
+    combiningState = MatchState False (if first then tot + 1 else tot) Nothing Nothing
+    controlState   = MatchState False tot Nothing Nothing
+    ambiguousState = MatchState False (tot + resolve Ambiguous) Nothing Nothing
+updateMatchState resolve s c            = updateMatchStateNoShortcut resolve s c
 
 -- | Update a 'MatchState' by processing a character, without taking any
 -- shortcuts. This should give the same answer as 'updateMatchState', but will
 -- be slower. It is here to test that the shortcuts are implemented correctly.
-updateMatchStateNoShortcut :: Int -> MatchState -> Char -> MatchState
-updateMatchStateNoShortcut ambiguousWidth (MatchState first tot _ Nothing) !c =
+updateMatchStateNoShortcut :: (UnicodeWidth -> Int) -> MatchState -> Char -> MatchState
+updateMatchStateNoShortcut resolve (MatchState first tot _ Nothing) !c =
     case IM.lookupLE oc unicodeWidthMap of
         -- If there is a specific match, record the tentative width, the map of
         -- continuations, and move to the next character
         Just (!oc', SpecificMatch r w m) | oc == oc' ->
-            let r' = resolveAmbiguous ambiguousWidth $ fromMaybe r w
+            let r' = resolve $ fromMaybe r w
             in MatchState False tot (Just r') (Just m)
         -- If there is only a range match, record the total width and move to
         -- the next character
@@ -754,161 +776,133 @@ updateMatchStateNoShortcut ambiguousWidth (MatchState first tot _ Nothing) !c =
             let r = rangeWidth match
                 -- If the string starts with a combining character.  Since there is no
                 -- preceding character, we count 0 width as 1 in this one case:
-                r' = if first && r == AbsoluteWidth 0 then 1 else resolveAmbiguous ambiguousWidth r
+                r' = resolve $ if first && r == Combining then Narrow else r
             in MatchState False (tot + r') Nothing Nothing
         -- M.lookupLE should not fail
         Nothing -> MatchState False (tot + 1) Nothing Nothing
   where
     oc = ord c
-updateMatchStateNoShortcut ambiguousWidth (MatchState _ tot w (Just !m)) !c
-    -- Skin tone modifiers and variation modifiers modify the emoji up to this
-    -- point, so can be discarded. However, they always make it width 2, so we
-    -- set the tentative width to 2.
-    | isEmojiModifier c || isEmojiVariation c = MatchState False tot (Just 2) (Just m)
+updateMatchStateNoShortcut resolve (MatchState _ tot w (Just !m)) !c
+    -- Variation modifiers modify the emoji up to this point, so can be
+    -- discarded. However, they always make it width 2, so we set the tentative
+    -- width to 2.
+    | isEmojiVariation c = MatchState False tot (Just 2) (Just m)
+    -- Skin tone modifiers make it width 2, but if they are not in a valid
+    -- position they end the emoji and take up another width 2.
+    | isSkinToneModifier c = if acceptsSkinTones m
+                                 then MatchState False tot (Just 2) (Just m)
+                                 else MatchState False (tot + fromMaybe 1 w + 2) Nothing Nothing
     -- Zero width joiners will join two emoji together, so let's discard the state and parse the next emoji
     | isEmojiJoiner c = MatchState False tot (Just 2) Nothing
     -- Otherwise, lookup the emoji continuations
-    | otherwise = case IM.lookup (ord c) m of
+    | otherwise = case emojiLookup c m of
         -- Continuations match, move to the next step with new continuations
-        Just (Emoji ew m') -> MatchState False tot (Just ew) (Just m')
+        Just m' -> MatchState False tot (Just 2) (Just m')
         -- No continuations match, use the tentative width and process c without continuations
         -- I guess we use shortcuts here; that's probably fine.
-        Nothing -> updateMatchState ambiguousWidth (MatchState False (tot + fromMaybe 0 w) Nothing Nothing) c
+        Nothing -> updateMatchState resolve (MatchState False (tot + fromMaybe 0 w) Nothing Nothing) c
 
 -- | Keeps track of state in length calculations, determining whether we're at
--- the first character, the width so far, whether we're in a wide or narrow
--- context, possibly a tentative width for this group, and the Map for possible emoji
--- continuations.
+-- the first character, the width so far, possibly a tentative width for this
+-- group, and the Map for possible emoji continuations.
 data MatchState = MatchState !Bool !Int !(Maybe Int) !(Maybe EmojiMap)
+  deriving (Show)
 
--- | Whether a character has defined width, or is dependent on context
-data Width = AbsoluteWidth !Int | Ambiguous
+-- | The unicode width  of a given character.
+data UnicodeWidth = Narrow | Wide | Combining | Control | Ambiguous
   deriving (Show, Eq)
 
 -- | A possible match for unicode characters; either within a range block, or a
 -- specific match with a block range width, possibly a specific width, and a map of
 -- continuations.
 data UnicodeWidthMatch
-    = RangeSeparator !Width                          -- This code point marks the boundary of a range
-    | SpecificMatch !Width !(Maybe Width) !EmojiMap  -- This code point has a specific emoji with continuations
+    -- | This code point marks the lower boundary of a range with given width
+    = RangeSeparator !UnicodeWidth
+    -- | This code point has emoji continuations
+    | SpecificMatch !UnicodeWidth          -- ^ The width of characters within this block
+                    !(Maybe UnicodeWidth)  -- ^ The width of this specific character, if there is one
+                    !EmojiMap              -- ^ The emoji continuations
   deriving (Show)
 
 instance Semigroup UnicodeWidthMatch where
-    (SpecificMatch r w m1) <> (SpecificMatch _ _ m2) = SpecificMatch r w $ concatEmojiMap m1 m2
+    (SpecificMatch r w1 m1) <> (SpecificMatch _ w2 m2) = SpecificMatch r (w1 <|> w2) $ m1 <> m2
+    (SpecificMatch _ w m)   <> (RangeSeparator r)      = SpecificMatch r w m
     s <> _ = s
 
 -- | The width of the block in which the character lies, ignoring specific
 -- matches.
-rangeWidth :: UnicodeWidthMatch -> Width
+rangeWidth :: UnicodeWidthMatch -> UnicodeWidth
 rangeWidth (RangeSeparator !r)      = r
 rangeWidth (SpecificMatch !r !_ !_) = r
 
 -- | The specific width of a character.
-specificWidth :: UnicodeWidthMatch -> Width
+specificWidth :: UnicodeWidthMatch -> UnicodeWidth
 specificWidth (RangeSeparator r)    = r
 specificWidth (SpecificMatch r w _) = fromMaybe r w
 
--- | Checks whether a character is a skin tone modifier
-isEmojiModifier :: Char -> Bool
-isEmojiModifier c = c >= '\x1F3FB' && c <= '\x1F3FF'
+-- | Checks whether a character is a skin tone modifier.
+isSkinToneModifier :: Char -> Bool
+isSkinToneModifier c = c >= '\x1F3FB' && c <= '\x1F3FF'
 
--- | Checks whether a character is an emoji variation modifier.
+-- | Checks whether a character is a variation modifier.
 isEmojiVariation :: Char -> Bool
-isEmojiVariation c = c == '\xFE0F'
+isEmojiVariation c = c >= '\xFE00' && c <= '\xFE0F'
 
 -- | Checks whether a character is an emoji joiner.
 isEmojiJoiner :: Char -> Bool
 isEmojiJoiner c = c == '\x200D'
 
+-- | Checks whether a character is a keypad character
+isKeypad :: Char -> Bool
+isKeypad c = isDigit c || c == '*' || c == '#'
+
 -- | A map for looking up the width of Unicode text.
 unicodeWidthMap :: IM.IntMap UnicodeWidthMatch
-unicodeWidthMap =
-    foldr addEmoji unicodeRangeMap
-    . filter (maybe True (not . isKeypad . fst) . T.uncons)  -- Keypad emoji can be handles by base rules
-    $ filter (not . T.any isEmojiModifier)                   -- Emoji modifiers are inferred from the base emoji
-    baseEmojis
-  where
-    isKeypad c = isDigit c || c == '*' || c == '#'
+unicodeWidthMap = foldr addEmoji unicodeRangeMap baseEmojis
 
--- | Denotes the contiguous ranges of Unicode characters which have a given
--- width: 1 for a regular character, 2 for an East Asian wide character. Emoji
--- have different widths and lie within some of these blocks. And the emoji
--- will be added later.
-unicodeRangeMap :: IM.IntMap UnicodeWidthMatch
-unicodeRangeMap = IM.fromList $ map (\(c, x) -> (ord c, x))
-    [ ('\x0000',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x0300',  RangeSeparator $ AbsoluteWidth 0)  -- combining
-    , ('\x0370',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x1100',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\x1160',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x11A3',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\x11A8',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x11FA',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\x1200',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x1AB0',  RangeSeparator $ AbsoluteWidth 0)  -- combining
-    , ('\x1B00',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x1DC0',  RangeSeparator $ AbsoluteWidth 0)  -- combining
-    , ('\x1E00',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x200B',  RangeSeparator $ AbsoluteWidth 0)  -- zero-width characters and directional overrides
-    , ('\x2010',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x20D0',  RangeSeparator $ AbsoluteWidth 0)  -- combining
-    , ('\x2100',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x2329',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\x232B',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x25EF',  RangeSeparator Ambiguous        )
-    , ('\x25F0',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x2E80',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\x303F',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x3041',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\x3248',  RangeSeparator Ambiguous        )  -- ambiguous
-    , ('\x3250',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\x4DC0',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x4E00',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\xA4D0',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\xA960',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\xA980',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\xAC00',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\xD800',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\xE000',  RangeSeparator Ambiguous        )  -- ambiguous
-    , ('\xF900',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\xFB00',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\xFE00',  RangeSeparator Ambiguous        )  -- ambiguous
-    , ('\xFE10',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\xFE20',  RangeSeparator $ AbsoluteWidth 0)  -- combining
-    , ('\xFE30',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\xFE70',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\xFF01',  RangeSeparator $ AbsoluteWidth 2)
-    , ('\xFF61',  RangeSeparator $ AbsoluteWidth 1)
-    , ('\x1B000', RangeSeparator $ AbsoluteWidth 2)
-    , ('\x1D000', RangeSeparator $ AbsoluteWidth 1)
-    , ('\x1F200', RangeSeparator $ AbsoluteWidth 2)
-    , ('\x1F300', RangeSeparator $ AbsoluteWidth 1)
-    , ('\x1F3FB', RangeSeparator $ AbsoluteWidth 2)  -- skin tone modifiers
-    , ('\x1F400', RangeSeparator $ AbsoluteWidth 1)
-    , ('\x20000', RangeSeparator $ AbsoluteWidth 2)
-    , ('\x3FFFD', RangeSeparator $ AbsoluteWidth 1)
-    ]
+-- | A map with emoji continuations as well as whether they take skin tone modifiers.
+data EmojiMap = EmojiMap
+    { acceptsSkinTones   :: Bool
+    , emojiContinuations :: IM.IntMap EmojiMap
+    }
+  deriving (Show, Eq)
 
-type EmojiMap = IM.IntMap Emoji
-data Emoji = Emoji !Int !EmojiMap
-  deriving (Show)
+instance Semigroup EmojiMap where
+    (EmojiMap b1 x) <> (EmojiMap b2 y) = EmojiMap (b1 || b2) $ IM.unionWith (<>) x y
 
-concatEmojiMap :: EmojiMap -> EmojiMap -> EmojiMap
-concatEmojiMap = IM.unionWith (\(Emoji w e1) (Emoji _ e2) -> Emoji w $ concatEmojiMap e1 e2)
+instance Monoid EmojiMap where
+    mempty = EmojiMap False mempty
 
-emojiToMatch :: IM.IntMap UnicodeWidthMatch -> NonEmpty Char -> UnicodeWidthMatch
-emojiToMatch m (x:|xs) = SpecificMatch r w . emojiToMap $ filter (not . isEmojiVariation) xs
-  where
-    r = maybe (AbsoluteWidth 1) (rangeWidth . snd) $ IM.lookupLT (ord x) m
-    -- If it is a single code point emoji, it is of width 2. Otherwise, don't
-    -- overwrite the range width.
-    w = if null xs then Just (AbsoluteWidth 2) else Nothing
+-- | Look up emoji continuations in an 'EmojiMap'.
+emojiLookup :: Char -> EmojiMap -> Maybe EmojiMap
+emojiLookup c m
+    | acceptsSkinTones m || not (isSkinToneModifier c) = IM.lookup (ord c) $ emojiContinuations m
+    | otherwise                                        = Nothing
 
 addEmoji :: Text -> IM.IntMap UnicodeWidthMatch -> IM.IntMap UnicodeWidthMatch
 addEmoji !emoji !m = case T.unpack emoji of
     []   -> m
     x:xs -> IM.insertWith (<>) (ord x) (emojiToMatch m (x:|xs)) m
 
-emojiToMap :: String -> EmojiMap
-emojiToMap []     = mempty
-emojiToMap (x:xs) = IM.singleton (ord x) . Emoji 2 $ emojiToMap xs
+emojiToMatch :: IM.IntMap UnicodeWidthMatch -> NonEmpty Char -> UnicodeWidthMatch
+emojiToMatch m (x:|xs) =
+    SpecificMatch r w . foldr updateEmojiMap mempty $ filter (not . isEmojiVariation) xs
+  where
+    updateEmojiMap c cont
+      | isSkinToneModifier c = cont{acceptsSkinTones = True}
+      | otherwise            = EmojiMap False $ IM.singleton (ord c) cont
+    r = maybe Narrow (rangeWidth . snd) $ IM.lookupLT (ord x) m
+    -- If it is a single code point emoji, it is of width 2. Otherwise, don't
+    -- overwrite the range width.
+    w = if null xs then Just Wide else Nothing
+
+-- | Denotes the contiguous ranges of Unicode characters which have a given
+-- width: 1 for a regular character, 2 for an East Asian wide character. Emoji
+-- have different widths and lie within some of these blocks. And the emoji
+-- will be added later.
+unicodeRangeMap :: IM.IntMap UnicodeWidthMatch
+unicodeRangeMap = IM.fromList $ map (bimap ord RangeSeparator) unicodeSpec
+
+-- | A list of Unicode ranges and the width assigned to them
+unicodeSpec :: [(Char, UnicodeWidth)]
+#include "unicodeWidth.inc"

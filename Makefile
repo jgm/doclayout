@@ -1,4 +1,4 @@
-all:
+all: src/Text/unicodeWidth.inc
 	stack test
 
 bench:
@@ -13,4 +13,12 @@ prof:
 repl:
 	stack ghci src/Text/DocLayout.hs --ghc-options=-XOverloadedStrings
 
-.PHONY: all clean bench repl prof
+src/Text/unicodeWidth.inc: EastAsianWidth.txt
+	./update.hs > $@
+
+unicodeVersion = latest
+
+EastAsianWidth.txt: .FORCE
+	curl https://www.unicode.org/Public/UCD/$(unicodeVersion)/ucd/$@ > $@
+
+.PHONY: all clean bench repl prof .FORCE
