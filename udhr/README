@@ -1,0 +1,34 @@
+Universal Declaration of Human Rights
+
+The original have been retrieved from the OHCHR web site:
+http://www.ohchr.org/EN/UDHR/Pages/Introduction.aspx
+
+The Universal Declaration of Human Rights (UDHR) is a milestone
+document in the history of human rights. Drafted by representatives
+with different legal and cultural backgrounds from all regions of the
+world, the Declaration was proclaimed by the United Nations General
+Assembly in Paris on 10 December 1948 General Assembly resolution 217
+A (III) as a common standard of achievements for all peoples and all
+nations. It sets out, for the first time, fundamental human rights to
+be universally protected.
+
+Translations contain no distinction between languages and dialects
+since all of them serve the purpose of global dissemination. At
+present, there are 360 different translations of UDHR, available in
+PDF format. Text can be extracted from 298 of the translations (The
+rest are mostly messy scans of handwritten documents). Text format
+translations contain 11446 characters on average (5064 – 42210
+characters).
+
+
+pdf/ 			original pdf files downloaded from the UN website.
+txt/ 			text extracted from pdf files with pdftotext (UTF-8).
+languages.txt 	        language codes and names
+
+This dataset has been retreived on 2021-10-21 from
+http://research.ics.aalto.fi/cog/data/udhr/.
+
+Tommi Vatanen, Jaakko J. Väyrynen and Sami Virpioja (2010) Language
+identification of short text segments with n-gram models. In Proceedings of the
+Seventh International Conference on Language Resources and Evaluation
+(LREC'10), pages 3423-3430. European Language Resources Association (ELRA).
