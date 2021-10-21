@@ -34,6 +34,8 @@ main = do
     emojiTxt <- evaluate . force . T.replicate 1000 $ mconcat baseEmojis <> mconcat zwjEmojis
     defaultMainWith defaultConfig{ timeLimit = 10.0 } $ cases ++
       -- Benchmarks for languages using all scripts used by more than 50 million people
+      -- https://en.wikipedia.org/wiki/List_of_writing_systems#List_of_writing_systems_by_adoption
+      -- https://www.unicode.org/udhr/translations.html
       [ bench "UDHR English"    $ nf realLength udhrEng  -- Plain ASCII
       , bench "UDHR French"     $ nf realLength udhrFrn  -- Latin with some diacritics
       , bench "UDHR Vietnamese" $ nf realLength udhrVie  -- Latin with more diacritics
