@@ -64,22 +64,22 @@ main = do
       -- Benchmarks for languages using all scripts used by more than 50 million people
       -- https://en.wikipedia.org/wiki/List_of_writing_systems#List_of_writing_systems_by_adoption
       -- https://www.unicode.org/udhr/translations.html
-      [ bench "UDHR English"    $ nf realLength udhrEng  -- Plain ASCII
-      , bench "UDHR French"     $ nf realLength udhrFrn  -- Latin with some diacritics
-      , bench "UDHR Vietnamese" $ nf realLength udhrVie  -- Latin with more diacritics
-      , bench "UDHR Mandarin"   $ nf realLength udhrChn  -- Mandarin
-      , bench "UDHR Arabic"     $ nf realLength udhrArz  -- Arabic
-      , bench "UDHR Hindi"      $ nf realLength udhrHnd  -- Hindi
-      , bench "UDHR Bengali"    $ nf realLength udhrBng  -- Bengali
-      , bench "UDHR Russian"    $ nf realLength udhrRus  -- Russian
-      , bench "UDHR Japanese"   $ nf realLength udhrJpn  -- Japanese
-      , bench "UDHR Korean"     $ nf realLength udhrKkn  -- Korean
-      , bench "UDHR Telugu"     $ nf realLength udhrTcw  -- Telugu
-      , bench "UDHR Tamil"      $ nf realLength udhrTcv  -- Tamil
+      [ bench "UDHR English"    $ nf realLengthNarrowContext udhrEng  -- Plain ASCII
+      , bench "UDHR French"     $ nf realLengthNarrowContext udhrFrn  -- Latin with some diacritics
+      , bench "UDHR Vietnamese" $ nf realLengthNarrowContext udhrVie  -- Latin with more diacritics
+      , bench "UDHR Mandarin"   $ nf realLengthWideContext   udhrChn  -- Mandarin
+      , bench "UDHR Arabic"     $ nf realLengthNarrowContext udhrArz  -- Arabic
+      , bench "UDHR Hindi"      $ nf realLengthNarrowContext udhrHnd  -- Hindi
+      , bench "UDHR Bengali"    $ nf realLengthNarrowContext udhrBng  -- Bengali
+      , bench "UDHR Russian"    $ nf realLengthNarrowContext udhrRus  -- Russian
+      , bench "UDHR Japanese"   $ nf realLengthWideContext   udhrJpn  -- Japanese
+      , bench "UDHR Korean"     $ nf realLengthWideContext   udhrKkn  -- Korean
+      , bench "UDHR Telugu"     $ nf realLengthNarrowContext udhrTcw  -- Telugu
+      , bench "UDHR Tamil"      $ nf realLengthNarrowContext udhrTcv  -- Tamil
       -- Benchmarks for other languages
-      , bench "UDHR Thai"       $ nf realLength udhrThj  -- Thai
-      , bench "UDHR Greek"      $ nf realLength udhrGrk  -- Greek
-      , bench "Emoji"           $ nf realLength emojiTxt -- Emoji
+      , bench "UDHR Thai"       $ nf realLengthNarrowContext udhrThj  -- Thai
+      , bench "UDHR Greek"      $ nf realLengthNarrowContext udhrGrk  -- Greek
+      , bench "Emoji"           $ nf realLengthNarrowContext emojiTxt -- Emoji
       ]
 
 -- | The Universal declaration of human rights in a given language, repeated 1000 times.
