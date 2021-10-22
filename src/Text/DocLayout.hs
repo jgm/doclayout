@@ -700,12 +700,12 @@ realLength = realLengthNarrowContext
 -- | Get the real length of a string, taking into account combining and
 -- double-wide characters. Ambiguous characters are treated as width 1.
 realLengthNarrowContext :: HasChars a => a -> Int
-realLengthNarrowContext = realLengthWith . updateMatchState $ resolveWidth 1
+realLengthNarrowContext = realLengthWith updateMatchStateNarrow
 
 -- | Get the real length of a string, taking into account combining and
 -- double-wide characters. Ambiguous characters are treated as width 2.
 realLengthWideContext :: HasChars a => a -> Int
-realLengthWideContext = realLengthWith . updateMatchState $ resolveWidth 2
+realLengthWideContext = realLengthWith updateMatchStateWide
 
 -- | Resolve ambiguous characters based on their context.
 resolveWidth :: Int -> UnicodeWidth -> Int
@@ -725,8 +725,9 @@ realLengthWith f = extractLength . foldlChar f (MatchState True 0 False 0 mempty
 -- | Update a 'MatchState' by processing a character.
 -- For efficiency, we isolate commonly used portions of the basic
 -- multilingual plane that do not have emoji in them.
-updateMatchState :: (UnicodeWidth -> Int) -> MatchState -> Char -> MatchState
-updateMatchState resolve (MatchState first tot _ _ Nothing) !c
+-- This works in a narrow context.
+updateMatchStateNarrow :: MatchState -> Char -> MatchState
+updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
     -- Control characters have width 0: friends don't let friends use tabs
     | c <= '\x001F'                     = controlState
     -- ASCII
@@ -749,34 +750,65 @@ updateMatchState resolve (MatchState first tot _ _ Nothing) !c
     wideState      = MatchState False (tot + 2) False 0 Nothing
     combiningState = let w = if first then 1 else 0 in MatchState False (tot + w) False 0 Nothing
     controlState   = MatchState False tot False 0 Nothing
-    ambiguousState = let w = resolve Ambiguous in MatchState False (tot + w) False 0 Nothing
-updateMatchState resolve s c            = updateMatchStateNoShortcut resolve s c
+    ambiguousState = MatchState False (tot + 1) False 0 Nothing
+updateMatchStateNarrow s c = updateMatchStateNoShortcut 1 s c
+
+-- | Update a 'MatchState' by processing a character.
+-- For efficiency, we isolate commonly used portions of the basic
+-- multilingual plane that do not have emoji in them.
+-- This works in a wide context.
+updateMatchStateWide :: MatchState -> Char -> MatchState
+updateMatchStateWide (MatchState first tot _ _ Nothing) !c
+    -- Control characters have width 0: friends don't let friends use tabs
+    | c <= '\x001F'                     = controlState
+    -- ASCII
+    | c <= '\x007E'                     = narrowState
+    -- Maximum contiguous range of width 2 containing CJK
+    | c >= '\x4DC0' && c <= '\x4DFF'    = narrowState     -- Hexagrams
+    | c >= '\x3250' && c <= '\xA4C6'    = wideState       -- Han ideographs
+    -- Hiragana and katakana
+    | c >= '\x3099' && c <= '\x309A'    = combiningState  -- Combining
+    | c == '\x303F'                     = narrowState     -- Half-fill space
+    | c >= '\x3030' && c <= '\x3247'    = wideState       -- Hiragana and Katakana
+    | c >= '\x3248' && c <= '\x324F'    = ambiguousState  -- Circled numbers
+    -- Combining characters have width 0
+    | c >= '\x0300' && c <= '\x036F'    = combiningState
+    | c >= '\x0483' && c <= '\x0489'    = combiningState
+    | c >= '\x0591' && c <= '\x05BD'    = combiningState
+    | c == '\x05BF'                     = combiningState
+  where
+    narrowState    = MatchState False (tot + 1) True 0 Nothing
+    wideState      = MatchState False (tot + 2) False 0 Nothing
+    combiningState = let w = if first then 1 else 0 in MatchState False (tot + w) False 0 Nothing
+    controlState   = MatchState False tot False 0 Nothing
+    ambiguousState = MatchState False (tot + 2) False 0 Nothing
+updateMatchStateWide s c = updateMatchStateNoShortcut 2 s c
 
 -- | Update a 'MatchState' by processing a character, without taking any
 -- shortcuts. This should give the same answer as 'updateMatchState', but will
 -- be slower. It is here to test that the shortcuts are implemented correctly.
-updateMatchStateNoShortcut :: (UnicodeWidth -> Int) -> MatchState -> Char -> MatchState
-updateMatchStateNoShortcut resolve (MatchState first tot lastNarrow _ Nothing) !c
+updateMatchStateNoShortcut :: Int -> MatchState -> Char -> MatchState
+updateMatchStateNoShortcut !ambiguous (MatchState first tot lastNarrow _ Nothing) !c
     | isEmojiVariation c = MatchState False (if lastNarrow then tot + 1 else tot) False 0 Nothing
     | otherwise = case IM.lookupLE oc unicodeWidthMap of
         -- If there is a specific match, record the tentative width, the map of
         -- continuations, and move to the next character
         Just (!oc', SpecificMatch r w m) | oc == oc' ->
             let r' = fromMaybe r w
-            in MatchState False tot (r' == Narrow) (resolve r') (Just m)
+            in MatchState False tot (r' == Narrow) (resolveWidth ambiguous r') (Just m)
         -- If there is only a range match, record the total width and move to
         -- the next character
         Just (!_, !match) ->
             let r = rangeWidth match
                 -- If the string starts with a combining character.  Since there is no
                 -- preceding character, we count 0 width as 1 in this one case:
-                r' = resolve $ if first && r == Combining then Narrow else r
+                r' = resolveWidth ambiguous $ if first && r == Combining then Narrow else r
             in MatchState False (tot + r') (r == Narrow) 0 Nothing
         -- M.lookupLE should not fail
         Nothing -> MatchState False (tot + 1) False 0 Nothing
   where
     oc = ord c
-updateMatchStateNoShortcut resolve (MatchState _ tot _ tent (Just !m)) !c
+updateMatchStateNoShortcut !ambiguous (MatchState _ tot _ tent (Just !m)) !c
     -- Variation modifiers modify the emoji up to this point, so can be
     -- discarded. However, they always make it width 2, so we set the tentative
     -- width to 2.
@@ -794,7 +826,9 @@ updateMatchStateNoShortcut resolve (MatchState _ tot _ tent (Just !m)) !c
         Just m' -> MatchState False tot False 2 (Just m')
         -- No continuations match, use the tentative width and process c without continuations
         -- I guess we use shortcuts here; that's probably fine.
-        Nothing -> updateMatchState resolve (MatchState False (tot + tent) False 0 Nothing) c
+        Nothing -> if ambiguous == 1
+                      then updateMatchStateNarrow (MatchState False (tot + tent) False 0 Nothing) c
+                      else updateMatchStateWide (MatchState False (tot + tent) False 0 Nothing) c
 
 -- | Keeps track of state in length calculations, determining whether we're at
 -- the first character, the width so far, possibly a tentative width for this

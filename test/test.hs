@@ -313,8 +313,8 @@ tests =
       zwjEmojis <&> \emoji -> testCase (T.unpack emoji) $ realLength emoji @?= 2
 
   , testProperty "shortcut provides same answer for string length in a narrow context" . withMaxSuccess 1000000 $
-      \(x :: String) -> realLengthNarrowContext x === realLengthWith (updateMatchStateNoShortcut (resolveWidth 1)) x
+      \(x :: String) -> realLengthNarrowContext x === realLengthWith (updateMatchStateNoShortcut 1) x
 
   , testProperty "shortcut provides same answer for string length in a wide context" . withMaxSuccess 1000000 $
-      \(x :: String) -> realLengthWideContext x === realLengthWith (updateMatchStateNoShortcut (resolveWidth 2)) x
+      \(x :: String) -> realLengthWideContext x === realLengthWith (updateMatchStateNoShortcut 2) x
   ]
