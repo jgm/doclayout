@@ -46,13 +46,13 @@ main = do
 
       , bench "tabular English" $
           nf (render (Just 80) :: Doc Text -> Text)
-             (let blah = hsep . map literal . take 800 . T.words $ udhrEng
+             (let blah = flowedDoc udhrEng
               in  cblock 20 blah <> lblock 30 blah <> rblock 10 blah $$
                   cblock 50 (nest 5 blah) <> rblock 10 blah)
 
       , bench "tabular Greek" $
           nf (render (Just 80) :: Doc Text -> Text)
-             (let blah = hsep . map literal . take 800 . T.words $ udhrGrk
+             (let blah = flowedDoc udhrGrk
               in  cblock 20 blah <> lblock 30 blah <> rblock 10 blah $$
                   cblock 50 (nest 5 blah) <> rblock 10 blah)
 
@@ -92,5 +92,5 @@ bigtext :: String
 bigtext = "Hello there. This is a big text."
 
 flowedDoc :: Text -> Doc Text
-flowedDoc txt = hsep $ map literal . take 800 . T.words $ txt
+flowedDoc txt = hsep $ map literal . T.words . T.take 5000 $ txt
 
