@@ -732,6 +732,35 @@ updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
     | c <= '\x001F'                     = controlState
     -- ASCII
     | c <= '\x007E'                     = narrowState
+    -- Extended Latin: Latin 1-supplement, Extended-A, Extended-B, IPA Extensions.
+    -- This block is full of ambiguous characters, so these shortcuts will not
+    -- work in a wide context.
+    | c == '\x00AD'                     = controlState    -- Soft hyphen
+    | c >= '\x00A0' && c <= '\x02FF'    = narrowState
+    -- Combining diacritical marks used in Latin and other scripts
+    | c >= '\x0300' && c <= '\x036F'    = combiningState
+    -- Arabic
+    | c >= '\x061D' && c <= '\x064A'    = narrowState     -- Main Arabic abjad
+    | c >= '\x064B' && c <= '\x065F'    = combiningState  -- Arabic vowel markers
+    | c == '\x0670'                     = combiningState  -- Superscript alef
+    | c >= '\x0660' && c <= '\x06D5'    = narrowState     -- Arabic digits and letters used in other languages
+    -- Devangari
+    | c >= '\x0904' && c <= '\x0939'    = narrowState     -- Main Devangari abugida
+    | c == '\x093D' || c == '\x0950'    = narrowState     -- Devangari avagraha and om
+    | c >= '\x0900' && c <= '\x0957'    = combiningState  -- Combining characters
+    | c >= '\x0962' && c <= '\x0963'    = combiningState  -- Combining characters
+    | c >= '\x0958' && c <= '\x0980'    = narrowState     -- Devangari digits and up to beginning of Bengali block
+    -- Bengali
+    | c >= '\x0985' && c <= '\x09B9'    = narrowState     -- Main Bengali abugida
+    | c >= '\x0981' && c <= '\x0983'    = combiningState  -- Combining characters
+    | c == '\x09BD' || c == '\x09CE'    = narrowState     -- Bengali avagraha and khanda ta
+    | c >= '\x09BC' && c <= '\x09D7'    = combiningState  -- Bengali vowel signs
+    | c >= '\x09E2' && c <= '\x09E3'    = combiningState  -- Bengali vocalic vowel signs
+    | c >= '\x09DC' && c <= '\x09FD'    = narrowState     -- Bengali digits and other symbols
+    -- Greek and Cyrillic
+    | c >= '\x0370' && c <= '\x0482'    = narrowState     -- Main Greek and Cyrillic block
+    | c >= '\x0483' && c <= '\x0489'    = combiningState  -- Cyrillic combining characters
+    | c >= '\x048A' && c <= '\x058F'    = narrowState     -- Extra Cyrillic characters used in Ukrainian and others, plus Armenian
     -- Maximum contiguous range of width 2 containing CJK
     | c >= '\x4DC0' && c <= '\x4DFF'    = narrowState     -- Hexagrams
     | c >= '\x3250' && c <= '\xA4C6'    = wideState       -- Han ideographs
@@ -741,7 +770,6 @@ updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
     | c >= '\x3030' && c <= '\x3247'    = wideState       -- Hiragana and Katakana
     | c >= '\x3248' && c <= '\x324F'    = ambiguousState  -- Circled numbers
     -- Combining characters have width 0
-    | c >= '\x0300' && c <= '\x036F'    = combiningState
     | c >= '\x0483' && c <= '\x0489'    = combiningState
     | c >= '\x0591' && c <= '\x05BD'    = combiningState
     | c == '\x05BF'                     = combiningState
