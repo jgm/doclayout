@@ -32,7 +32,7 @@ main = do
     udhrThj <- udhrLang "thj"
     udhrGrk <- udhrLang "grk"
     emojiTxt <- evaluate . force . T.replicate 1000 $ mconcat baseEmojis <> mconcat zwjEmojis
-    defaultMainWith defaultConfig{ timeLimit = 10.0 }
+    defaultMainWith defaultConfig{ timeLimit = 10.0 } $
       [ bench "sample document 2" $
           nf (render Nothing :: Doc Text -> Text)
              (nest 3 $ cblock 20 $ vcat $ replicate 15 $
@@ -59,6 +59,7 @@ main = do
       , bench "soft spaces at end of line" $
           nf (render Nothing :: Doc Text -> Text)
              ("a" <> mconcat (replicate 50 (space <> lblock 1 mempty)))
+      ] ++
 
       -- Benchmarks for languages using all scripts used by more than 50 million people
       -- https://en.wikipedia.org/wiki/List_of_writing_systems#List_of_writing_systems_by_adoption
@@ -85,7 +86,7 @@ main = do
 udhrLang :: String -> IO Text
 udhrLang lang = do
     txt <- T.readFile ("udhr/txt/" ++ lang ++ ".txt")
-    evaluate . force $ T.replicate 1000 txt
+    evaluate . force $ T.replicate 10000 txt
 
 bigtext :: String
 bigtext = "Hello there. This is a big text."
