@@ -71,7 +71,9 @@ module Text.DocLayout (
      , realLength
      , realLengthNarrowContext
      , realLengthWideContext
-     , realLengthNoShortcut
+     , realLengthWith
+     , updateMatchStateNoShortcut
+     , resolveWidth
      , isSkinToneModifier
      , isEmojiVariation
      , isEmojiJoiner
@@ -705,13 +707,6 @@ realLengthNarrowContext = realLengthWith . updateMatchState $ resolveWidth 1
 realLengthWideContext :: HasChars a => a -> Int
 realLengthWideContext = realLengthWith . updateMatchState $ resolveWidth 2
 
--- | Get real length of string, taking into account combining and double-wide
--- characters, without taking any shortcuts. This should give the same answer
--- as 'updateMatchState', but will be slower. It is here to test that the
--- shortcuts are implemented correctly. Ambiguous characters are treated as width 1.
-realLengthNoShortcut :: HasChars a => a -> Int
-realLengthNoShortcut = realLengthWith . updateMatchStateNoShortcut $ resolveWidth 1
-
 -- | Resolve ambiguous characters based on their context.
 resolveWidth :: Int -> UnicodeWidth -> Int
 resolveWidth _ Narrow    = 1
@@ -721,7 +716,7 @@ resolveWidth _ Control   = 0
 resolveWidth c Ambiguous = c
 
 -- | Get real length of string, taking into account combining and double-wide
--- characters, using the given accumulator.
+-- characters, using the given accumulator. This is exposed for testing.
 realLengthWith :: HasChars a => (MatchState -> Char -> MatchState) -> a -> Int
 realLengthWith f = extractLength . foldlChar f (MatchState True 0 False 0 mempty)
   where
