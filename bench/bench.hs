@@ -32,7 +32,34 @@ main = do
     udhrThj <- udhrLang "thj"
     udhrGrk <- udhrLang "grk"
     emojiTxt <- evaluate . force . T.replicate 1000 $ mconcat baseEmojis <> mconcat zwjEmojis
-    defaultMainWith defaultConfig{ timeLimit = 10.0 } $ cases ++
+    defaultMainWith defaultConfig{ timeLimit = 10.0 }
+      [ bench "sample document 2" $
+          nf (render Nothing :: Doc Text -> Text)
+             (nest 3 $ cblock 20 $ vcat $ replicate 15 $
+               hsep $ map text $ words bigtext)
+
+      , bench "reflow English" $
+          nf (render (Just 20) :: Doc Text -> Text) $ flowedDoc udhrEng
+
+      , bench "reflow Greek" $
+          nf (render (Just 20) :: Doc Text -> Text) $ flowedDoc udhrGrk
+
+      , bench "tabular English" $
+          nf (render (Just 80) :: Doc Text -> Text)
+             (let blah = hsep . map literal . take 800 . T.words $ udhrEng
+              in  cblock 20 blah <> lblock 30 blah <> rblock 10 blah $$
+                  cblock 50 (nest 5 blah) <> rblock 10 blah)
+
+      , bench "tabular Greek" $
+          nf (render (Just 80) :: Doc Text -> Text)
+             (let blah = hsep . map literal . take 800 . T.words $ udhrGrk
+              in  cblock 20 blah <> lblock 30 blah <> rblock 10 blah $$
+                  cblock 50 (nest 5 blah) <> rblock 10 blah)
+
+      , bench "soft spaces at end of line" $
+          nf (render Nothing :: Doc Text -> Text)
+             ("a" <> mconcat (replicate 50 (space <> lblock 1 mempty)))
+
       -- Benchmarks for languages using all scripts used by more than 50 million people
       -- https://en.wikipedia.org/wiki/List_of_writing_systems#List_of_writing_systems_by_adoption
       -- https://www.unicode.org/udhr/translations.html
@@ -63,28 +90,6 @@ udhrLang lang = do
 bigtext :: String
 bigtext = "Hello there. This is a big text."
 
-flowedDoc :: Doc Text
-flowedDoc = hsep $ map text $ words . unwords $ replicate 500 bigtext
+flowedDoc :: Text -> Doc Text
+flowedDoc txt = hsep $ map literal . take 800 . T.words $ txt
 
-cases :: [Benchmark]
-cases =
-  [
-   bench "sample document 2" $
-      nf (render Nothing :: Doc Text -> Text)
-         (nest 3 $ cblock 20 $ vcat $ replicate 15 $
-           hsep $ map text $ words bigtext)
-
-  , bench "reflow" $
-      nf (render (Just 20) :: Doc Text -> Text) flowedDoc
-
-  , bench "tabular" $
-      nf (render (Just 80) :: Doc Text -> Text)
-         (let blah = hsep $ map text $ words . unwords
-                           $ replicate 50 bigtext
-          in  cblock 20 blah <> lblock 30 blah <> rblock 10 blah $$
-              cblock 50 (nest 5 blah) <> rblock 10 blah)
-
-  , bench "soft spaces at end of line" $
-      nf (render Nothing :: Doc Text -> Text)
-         ("a" <> mconcat (replicate 50 (space <> lblock 1 mempty)))
-  ]
