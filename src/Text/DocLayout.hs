@@ -78,6 +78,8 @@ module Text.DocLayout (
      , isSkinToneModifier
      , isEmojiVariation
      , isEmojiJoiner
+     -- * Utility functions
+     , unfoldD
      -- * Types
      , Doc(..)
      , HasChars(..)
