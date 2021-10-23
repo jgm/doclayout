@@ -1,13 +1,14 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE BangPatterns      #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP               #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE DeriveFoldable    #-}
-{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE BangPatterns       #-}
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFoldable     #-}
+{-# LANGUAGE DeriveFunctor      #-}
+{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DeriveTraversable  #-}
+{-# LANGUAGE FlexibleInstances  #-}
+{-# LANGUAGE MultiWayIf         #-}
+{-# LANGUAGE NoImplicitPrelude  #-}
+{-# LANGUAGE OverloadedStrings  #-}
 {- |
    Module      : Text.DocLayout
    Copyright   : Copyright (C) 2010-2019 John MacFarlane
@@ -729,50 +730,78 @@ realLengthWith f = extractLength . foldlChar f (MatchState True 0 False 0 mempty
 updateMatchStateNarrow :: MatchState -> Char -> MatchState
 updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
     -- Control characters have width 0: friends don't let friends use tabs
-    | c <= '\x001F'                     = controlState
+    | c <= '\x001F'  = controlState
     -- ASCII
-    | c <= '\x007E'                     = narrowState
+    | c <= '\x007E'  = narrowState
+    -- More control characters
+    | c <= '\x009F'  = controlState
     -- Extended Latin: Latin 1-supplement, Extended-A, Extended-B, IPA Extensions.
     -- This block is full of ambiguous characters, so these shortcuts will not
     -- work in a wide context.
-    | c == '\x00AD'                     = controlState    -- Soft hyphen
-    | c >= '\x00A0' && c <= '\x02FF'    = narrowState
+    | c == '\x00AD'  = controlState    -- Soft hyphen
+    | c <= '\x02FF'  = narrowState
     -- Combining diacritical marks used in Latin and other scripts
-    | c >= '\x0300' && c <= '\x036F'    = combiningState
+    | c <= '\x036F'  = combiningState
     -- Arabic
-    | c >= '\x061D' && c <= '\x064A'    = narrowState     -- Main Arabic abjad
-    | c >= '\x064B' && c <= '\x065F'    = combiningState  -- Arabic vowel markers
-    | c == '\x0670'                     = combiningState  -- Superscript alef
-    | c >= '\x0660' && c <= '\x06D5'    = narrowState     -- Arabic digits and letters used in other languages
-    -- Devangari
-    | c >= '\x0904' && c <= '\x0939'    = narrowState     -- Main Devangari abugida
-    | c == '\x093D' || c == '\x0950'    = narrowState     -- Devangari avagraha and om
-    | c >= '\x0900' && c <= '\x0957'    = combiningState  -- Combining characters
-    | c >= '\x0962' && c <= '\x0963'    = combiningState  -- Combining characters
-    | c >= '\x0958' && c <= '\x0980'    = narrowState     -- Devangari digits and up to beginning of Bengali block
-    -- Bengali
-    | c >= '\x0985' && c <= '\x09B9'    = narrowState     -- Main Bengali abugida
-    | c >= '\x0981' && c <= '\x0983'    = combiningState  -- Combining characters
-    | c == '\x09BD' || c == '\x09CE'    = narrowState     -- Bengali avagraha and khanda ta
-    | c >= '\x09BC' && c <= '\x09D7'    = combiningState  -- Bengali vowel signs
-    | c >= '\x09E2' && c <= '\x09E3'    = combiningState  -- Bengali vocalic vowel signs
-    | c >= '\x09DC' && c <= '\x09FD'    = narrowState     -- Bengali digits and other symbols
-    -- Greek and Cyrillic
-    | c >= '\x0370' && c <= '\x0482'    = narrowState     -- Main Greek and Cyrillic block
-    | c >= '\x0483' && c <= '\x0489'    = combiningState  -- Cyrillic combining characters
-    | c >= '\x048A' && c <= '\x058F'    = narrowState     -- Extra Cyrillic characters used in Ukrainian and others, plus Armenian
-    -- Maximum contiguous range of width 2 containing CJK
-    | c >= '\x4DC0' && c <= '\x4DFF'    = narrowState     -- Hexagrams
-    | c >= '\x3250' && c <= '\xA4C6'    = wideState       -- Han ideographs
-    -- Hiragana and katakana
-    | c >= '\x3099' && c <= '\x309A'    = combiningState  -- Combining
-    | c == '\x303F'                     = narrowState     -- Half-fill space
-    | c >= '\x3030' && c <= '\x3247'    = wideState       -- Hiragana and Katakana
-    | c >= '\x3248' && c <= '\x324F'    = ambiguousState  -- Circled numbers
-    -- Combining characters have width 0
-    | c >= '\x0483' && c <= '\x0489'    = combiningState
-    | c >= '\x0591' && c <= '\x05BD'    = combiningState
-    | c == '\x05BF'                     = combiningState
+    | c >= '\x0600' && c <= '\x06FF' =
+        if | c <= '\x0605' -> controlState    -- Number marks
+           | c <= '\x060F' -> narrowState     -- Punctuation and marks
+           | c <= '\x061A' -> combiningState  -- Combining marks
+           | c == '\x061B' -> narrowState     -- Arabic semicolon
+           | c <= '\x061C' -> controlState    -- Letter mark
+           | c <= '\x064A' -> narrowState     -- Main Arabic abjad
+           | c <= '\x065F' -> combiningState  -- Arabic vowel markers
+           | c == '\x0670' -> combiningState  -- Superscript alef
+           | c <= '\x06D5' -> narrowState     -- Arabic digits and letters used in other languages
+           | c <= '\x06DC' -> combiningState  -- Small high ligatures
+           | c == '\x06DD' -> controlState    -- End of ayah
+           | c == '\x06DE' -> narrowState     -- Start of rub el hizb
+           | c <= '\x06E4' -> combiningState  -- More small high ligatures
+           | c <= '\x06E6' -> narrowState     -- Small vowels
+           | c == '\x06E9' -> narrowState     -- Place of sajdah
+           | c <= '\x06ED' -> combiningState  -- More combining
+           | otherwise     -> narrowState     -- All the rest
+    -- Devanagari (plus one Bengali character)
+    | c >= '\x0900' && c <= '\x0980' =
+        if | c <= '\x0903' -> combiningState  -- Combining characters
+           | c <= '\x0939' -> narrowState     -- Main Devanagari abugida
+           | c == '\x093D' -> narrowState     -- Devanagari avagraha
+           | c == '\x0950' -> narrowState     -- Devanagari om
+           | c <= '\x0957' -> combiningState  -- Combining characters
+           | c == '\x0962' -> combiningState  -- Combining character
+           | c == '\x0963' -> combiningState  -- Combining character
+           | otherwise     -> narrowState     -- Devanagari digits and up to beginning of Bengali block
+    -- Bengali (plus a couple Gurmukhi characters)
+    | c >= '\x0981' && c <= '\x0A03' =
+        if | c <= '\x0983' -> combiningState  -- Combining signs
+           | c <= '\x09B9' -> narrowState     -- Main Bengali abugida
+           | c == '\x09BD' -> narrowState     -- Bengali avagraha
+           | c == '\x09CE' -> narrowState     -- Bengali khanda ta
+           | c <= '\x09D7' -> combiningState  -- Combining marks
+           | c == '\x09E2' -> combiningState  -- Bengali vocalic vowel signs
+           | c == '\x09E3' -> combiningState  -- Bengali vocalic vowel signs
+           | c <= '\x09FD' -> narrowState     -- Bengali digits and other symbols
+           | otherwise     -> combiningState  -- Bengali sandhi mark, plus a few symbols from Gurmukhi
+    -- Cyrillic (plus Greek and Armenian for free)
+    -- This block has many ambiguous characters, and so cannot be used in wide contexts
+    | c >= '\x0370' && c <= '\x058F' =
+        if | c <= '\x0482' -> narrowState     -- Main Greek and Cyrillic block
+           | c <= '\x0489' -> combiningState  -- Cyrillic combining characters
+           | otherwise     -> narrowState     -- Extra Cyrillic characters used in Ukrainian and others, plus Armenian
+    -- Han ideographs
+    | c >= '\x3250' && c <= '\xA4CF' =
+        if | c <= '\x4DBF' -> wideState       -- Han ideographs
+           | c <= '\x4DFF' -> narrowState     -- Hexagrams
+           | otherwise     -> wideState       -- More Han ideographs
+    -- Japanese
+    | c >= '\x2E80' && c <= '\x324F' =
+        if | c <= '\x3029' -> wideState       -- Punctuation and others
+           | c <= '\x302F' -> combiningState  -- Tone marks
+           | c == '\x303F' -> narrowState     -- Half-fill space
+           | c <= '\x3096' -> wideState       -- Hiragana and others
+           | c <= '\x309A' -> combiningState  -- Hiragana voiced marks
+           | c <= '\x3247' -> wideState       -- Katakana plus compatibility Jamo for Korean
+           | otherwise     -> ambiguousState  -- Circled numbers
   where
     narrowState    = MatchState False (tot + 1) True 0 Nothing
     wideState      = MatchState False (tot + 2) False 0 Nothing
@@ -788,22 +817,65 @@ updateMatchStateNarrow s c = updateMatchStateNoShortcut 1 s c
 updateMatchStateWide :: MatchState -> Char -> MatchState
 updateMatchStateWide (MatchState first tot _ _ Nothing) !c
     -- Control characters have width 0: friends don't let friends use tabs
-    | c <= '\x001F'                     = controlState
+    | c <= '\x001F'  = controlState
     -- ASCII
-    | c <= '\x007E'                     = narrowState
-    -- Maximum contiguous range of width 2 containing CJK
-    | c >= '\x4DC0' && c <= '\x4DFF'    = narrowState     -- Hexagrams
-    | c >= '\x3250' && c <= '\xA4C6'    = wideState       -- Han ideographs
-    -- Hiragana and katakana
-    | c >= '\x3099' && c <= '\x309A'    = combiningState  -- Combining
-    | c == '\x303F'                     = narrowState     -- Half-fill space
-    | c >= '\x3030' && c <= '\x3247'    = wideState       -- Hiragana and Katakana
-    | c >= '\x3248' && c <= '\x324F'    = ambiguousState  -- Circled numbers
-    -- Combining characters have width 0
-    | c >= '\x0300' && c <= '\x036F'    = combiningState
-    | c >= '\x0483' && c <= '\x0489'    = combiningState
-    | c >= '\x0591' && c <= '\x05BD'    = combiningState
-    | c == '\x05BF'                     = combiningState
+    | c <= '\x007E'  = narrowState
+    -- Han ideographs
+    | c >= '\x3250' && c <= '\xA4CF' =
+        if | c <= '\x4DBF' -> wideState       -- Han ideographs
+           | c <= '\x4DFF' -> narrowState     -- Hexagrams
+           | otherwise     -> wideState       -- More Han ideographs
+    -- Japanese
+    | c >= '\x2E80' && c <= '\x324F' =
+        if | c <= '\x3029' -> wideState       -- Punctuation and others
+           | c <= '\x302F' -> combiningState  -- Tone marks
+           | c == '\x303F' -> narrowState     -- Half-fill space
+           | c <= '\x3096' -> wideState       -- Hiragana and others
+           | c <= '\x309A' -> combiningState  -- Hiragana voiced marks
+           | c <= '\x3247' -> wideState       -- Katakana plus compatibility Jamo for Korean
+           | otherwise     -> ambiguousState  -- Circled numbers
+    -- Combining diacritical marks used in Latin and other scripts
+    | c >= '\x0300' && c <= '\x036F'  = combiningState
+    -- Arabic
+    | c >= '\x0600' && c <= '\x06FF' =
+        if | c <= '\x0605' -> controlState    -- Number marks
+           | c <= '\x060F' -> narrowState     -- Punctuation and marks
+           | c <= '\x061A' -> combiningState  -- Combining marks
+           | c == '\x061B' -> narrowState     -- Arabic semicolon
+           | c <= '\x061C' -> controlState    -- Letter mark
+           | c <= '\x064A' -> narrowState     -- Main Arabic abjad
+           | c <= '\x065F' -> combiningState  -- Arabic vowel markers
+           | c == '\x0670' -> combiningState  -- Superscript alef
+           | c <= '\x06D5' -> narrowState     -- Arabic digits and letters used in other languages
+           | c <= '\x06DC' -> combiningState  -- Small high ligatures
+           | c == '\x06DD' -> controlState    -- End of ayah
+           | c == '\x06DE' -> narrowState     -- Start of rub el hizb
+           | c <= '\x06E4' -> combiningState  -- More small high ligatures
+           | c <= '\x06E6' -> narrowState     -- Small vowels
+           | c == '\x06E9' -> narrowState     -- Place of sajdah
+           | c <= '\x06ED' -> combiningState  -- More combining
+           | otherwise     -> narrowState     -- All the rest
+    -- Devanagari (plus one Bengali character)
+    | c >= '\x0900' && c <= '\x0980' =
+        if | c <= '\x0903' -> combiningState  -- Combining characters
+           | c <= '\x0939' -> narrowState     -- Main Devanagari abugida
+           | c == '\x093D' -> narrowState     -- Devanagari avagraha
+           | c == '\x0950' -> narrowState     -- Devanagari om
+           | c <= '\x0957' -> combiningState  -- Combining characters
+           | c == '\x0962' -> combiningState  -- Combining character
+           | c == '\x0963' -> combiningState  -- Combining character
+           | otherwise     -> narrowState     -- Devanagari digits and up to beginning of Bengali block
+    -- Bengali (plus a couple Gurmukhi characters)
+    | c >= '\x0981' && c <= '\x0A03' =
+        if | c <= '\x0983' -> combiningState  -- Combining signs
+           | c <= '\x09B9' -> narrowState     -- Main Bengali abugida
+           | c == '\x09BD' -> narrowState     -- Bengali avagraha
+           | c == '\x09CE' -> narrowState     -- Bengali khanda ta
+           | c <= '\x09D7' -> combiningState  -- Combining marks
+           | c == '\x09E2' -> combiningState  -- Bengali vocalic vowel signs
+           | c == '\x09E3' -> combiningState  -- Bengali vocalic vowel signs
+           | c <= '\x09FD' -> narrowState     -- Bengali digits and other symbols
+           | otherwise     -> combiningState  -- Bengali sandhi mark, plus a few symbols from Gurmukhi
   where
     narrowState    = MatchState False (tot + 1) True 0 Nothing
     wideState      = MatchState False (tot + 2) False 0 Nothing
@@ -823,7 +895,7 @@ updateMatchStateNoShortcut !ambiguous (MatchState first tot lastNarrow _ Nothing
         -- continuations, and move to the next character
         Just (!oc', SpecificMatch r w m) | oc == oc' ->
             let r' = fromMaybe r w
-            in MatchState False tot (r' == Narrow) (resolveWidth ambiguous r') (Just m)
+             in MatchState False tot (isNarrow r') (resolveWidth ambiguous r') (Just m)
         -- If there is only a range match, record the total width and move to
         -- the next character
         Just (!_, !match) ->
@@ -831,10 +903,11 @@ updateMatchStateNoShortcut !ambiguous (MatchState first tot lastNarrow _ Nothing
                 -- If the string starts with a combining character.  Since there is no
                 -- preceding character, we count 0 width as 1 in this one case:
                 r' = resolveWidth ambiguous $ if first && r == Combining then Narrow else r
-            in MatchState False (tot + r') (r == Narrow) 0 Nothing
+            in MatchState False (tot + r') (isNarrow r) 0 Nothing
         -- M.lookupLE should not fail
         Nothing -> MatchState False (tot + 1) False 0 Nothing
   where
+    isNarrow x = x == Narrow || (x == Ambiguous && ambiguous == 1)
     oc = ord c
 updateMatchStateNoShortcut !ambiguous (MatchState _ tot _ tent (Just !m)) !c
     -- Variation modifiers modify the emoji up to this point, so can be
