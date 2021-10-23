@@ -742,6 +742,11 @@ updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
     | c <= '\x02FF'  = narrowState
     -- Combining diacritical marks used in Latin and other scripts
     | c <= '\x036F'  = combiningState
+    -- Han ideographs
+    | c >= '\x3250' && c <= '\xA4CF' =
+        if | c <= '\x4DBF' -> wideState       -- Han ideographs
+           | c <= '\x4DFF' -> narrowState     -- Hexagrams
+           | otherwise     -> wideState       -- More Han ideographs
     -- Arabic
     | c >= '\x0600' && c <= '\x06FF' =
         if | c <= '\x0605' -> controlState    -- Number marks
@@ -788,11 +793,6 @@ updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
         if | c <= '\x0482' -> narrowState     -- Main Greek and Cyrillic block
            | c <= '\x0489' -> combiningState  -- Cyrillic combining characters
            | otherwise     -> narrowState     -- Extra Cyrillic characters used in Ukrainian and others, plus Armenian
-    -- Han ideographs
-    | c >= '\x3250' && c <= '\xA4CF' =
-        if | c <= '\x4DBF' -> wideState       -- Han ideographs
-           | c <= '\x4DFF' -> narrowState     -- Hexagrams
-           | otherwise     -> wideState       -- More Han ideographs
     -- Japanese
     | c >= '\x2E80' && c <= '\x324F' =
         if | c <= '\x3029' -> wideState       -- Punctuation and others
@@ -802,6 +802,24 @@ updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
            | c <= '\x309A' -> combiningState  -- Hiragana voiced marks
            | c <= '\x3247' -> wideState       -- Katakana plus compatibility Jamo for Korean
            | otherwise     -> ambiguousState  -- Circled numbers
+    -- Korean
+    | c >= '\xAC00' && c <= '\xD7A3' = wideState  -- Precomposed Hangul
+    -- Telugu (plus one character of Kannada)
+    | c >= '\x0C00' && c <= '\x0C80' =
+        if | c <= '\x0C04' -> combiningState  -- Combining characters
+           | c <= '\x0C39' -> narrowState     -- Main Telugu abugida
+           | c == '\x0C3D' -> narrowState     -- Telugu avagraha
+           | c <= '\x0C56' -> combiningState  -- Vowel markers
+           | c == '\x0C62' -> combiningState  -- Combining character
+           | c == '\x0C63' -> combiningState  -- Combining character
+           | otherwise     -> narrowState     -- Telugu digits
+    -- Tamil
+    | c >= '\x0B80' && c <= '\x0BFF' =
+        if | c <= '\x0B82' -> combiningState  -- Combining characters
+           | c <= '\x0BB9' -> narrowState     -- Main Tamil abugida
+           | c <= '\x0BCD' -> combiningState  -- Vowel markers
+           | c == '\x0BD7' -> combiningState  -- Combining character
+           | otherwise     -> narrowState     -- Tamil digits and others
   where
     narrowState    = MatchState False (tot + 1) True 0 Nothing
     wideState      = MatchState False (tot + 2) False 0 Nothing
@@ -834,6 +852,8 @@ updateMatchStateWide (MatchState first tot _ _ Nothing) !c
            | c <= '\x309A' -> combiningState  -- Hiragana voiced marks
            | c <= '\x3247' -> wideState       -- Katakana plus compatibility Jamo for Korean
            | otherwise     -> ambiguousState  -- Circled numbers
+    -- Korean
+    | c >= '\xAC00' && c <= '\xD7A3' = wideState  -- Precomposed Hangul
     -- Combining diacritical marks used in Latin and other scripts
     | c >= '\x0300' && c <= '\x036F'  = combiningState
     -- Arabic
@@ -876,6 +896,22 @@ updateMatchStateWide (MatchState first tot _ _ Nothing) !c
            | c == '\x09E3' -> combiningState  -- Bengali vocalic vowel signs
            | c <= '\x09FD' -> narrowState     -- Bengali digits and other symbols
            | otherwise     -> combiningState  -- Bengali sandhi mark, plus a few symbols from Gurmukhi
+    -- Telugu (plus one character of Kannada)
+    | c >= '\x0C00' && c <= '\x0C80' =
+        if | c <= '\x0C04' -> combiningState  -- Combining characters
+           | c <= '\x0C39' -> narrowState     -- Main Telugu abugida
+           | c == '\x0C3D' -> narrowState     -- Telugu avagraha
+           | c <= '\x0C56' -> combiningState  -- Vowel markers
+           | c == '\x0C62' -> combiningState  -- Combining character
+           | c == '\x0C63' -> combiningState  -- Combining character
+           | otherwise     -> narrowState     -- Telugu digits
+    -- Tamil
+    | c >= '\x0B80' && c <= '\x0BFF' =
+        if | c <= '\x0B82' -> combiningState  -- Combining characters
+           | c <= '\x0BB9' -> narrowState     -- Main Tamil abugida
+           | c <= '\x0BCD' -> combiningState  -- Vowel markers
+           | c == '\x0BD7' -> combiningState  -- Combining character
+           | otherwise     -> narrowState     -- Tamil digits and others
   where
     narrowState    = MatchState False (tot + 1) True 0 Nothing
     wideState      = MatchState False (tot + 2) False 0 Nothing
