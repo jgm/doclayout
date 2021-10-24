@@ -49,13 +49,10 @@ unicodeWidth (UnicodeRange _ _ w cat) = fromMaybe w $ processCat cat
 
 processCat :: Text -> Maybe UnicodeWidth
 processCat "Mn" = Just Combining
-processCat "Mc" = Just Combining
 processCat "Me" = Just Combining
+processCat "Mc" = Nothing         -- Spacing marks, often used in abugidas, are combining but also add to the width
 processCat "Cc" = Just Control
 processCat "Cf" = Just Control
-processCat "Cs" = Just Control
-processCat "Co" = Just Control
-processCat "Cn" = Just Control
 processCat _    = Nothing
 
 -- | Parse a Unicode spec file containing lists of valid emoji

@@ -768,23 +768,29 @@ updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
            | c == '\x06E9' -> narrowState     -- Place of sajdah
            | c <= '\x06ED' -> combiningState  -- More combining
            | otherwise     -> narrowState     -- All the rest
-    -- Devanagari (plus one Bengali character)
-    | c >= '\x0900' && c <= '\x0980' =
-        if | c <= '\x0903' -> combiningState  -- Combining characters
+    -- Devanagari
+    | c >= '\x0900' && c <= '\x097F' =
+        if | c <= '\x0902' -> combiningState  -- Combining characters
            | c <= '\x0939' -> narrowState     -- Main Devanagari abugida
-           | c == '\x093D' -> narrowState     -- Devanagari avagraha
-           | c == '\x0950' -> narrowState     -- Devanagari om
+           | c == '\x093A' -> combiningState
+           | c == '\x093C' -> combiningState
+           | c <= '\x0940' -> narrowState     -- Main Devanagari abugida
+           | c <= '\x0948' -> combiningState  -- Combining characters
+           | c == '\x094D' -> combiningState  -- Combining characters
+           | c <= '\x0950' -> narrowState     -- Devanagari om
            | c <= '\x0957' -> combiningState  -- Combining characters
            | c == '\x0962' -> combiningState  -- Combining character
            | c == '\x0963' -> combiningState  -- Combining character
            | otherwise     -> narrowState     -- Devanagari digits and up to beginning of Bengali block
     -- Bengali (plus a couple Gurmukhi characters)
-    | c >= '\x0981' && c <= '\x0A03' =
-        if | c <= '\x0983' -> combiningState  -- Combining signs
-           | c <= '\x09B9' -> narrowState     -- Main Bengali abugida
-           | c == '\x09BD' -> narrowState     -- Bengali avagraha
-           | c == '\x09CE' -> narrowState     -- Bengali khanda ta
-           | c <= '\x09D7' -> combiningState  -- Combining marks
+    | c >= '\x0980' && c <= '\x0A02' =
+        if | c == '\x0981' -> combiningState  -- Combining signs
+           | c == '\x09BC' -> combiningState  -- Combining signs
+           | c <= '\x09C0' -> narrowState     -- Main Bengali abugida
+           | c <= '\x09C4' -> combiningState  -- Combining signs
+           | c == '\x09CD' -> combiningState  -- Combining signs
+           | c <= '\x09E1' -> narrowState     -- Bengali
+           | c <= '\x09E3' -> combiningState  -- Combining marks
            | c == '\x09E2' -> combiningState  -- Bengali vocalic vowel signs
            | c == '\x09E3' -> combiningState  -- Bengali vocalic vowel signs
            | c <= '\x09FD' -> narrowState     -- Bengali digits and other symbols
@@ -798,7 +804,7 @@ updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
     -- Japanese
     | c >= '\x2E80' && c <= '\x324F' =
         if | c <= '\x3029' -> wideState       -- Punctuation and others
-           | c <= '\x302F' -> combiningState  -- Tone marks
+           | c <= '\x302D' -> combiningState  -- Tone marks
            | c == '\x303F' -> narrowState     -- Half-fill space
            | c <= '\x3096' -> wideState       -- Hiragana and others
            | c <= '\x309A' -> combiningState  -- Hiragana voiced marks
@@ -808,9 +814,12 @@ updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
     | c >= '\xAC00' && c <= '\xD7A3' = wideState  -- Precomposed Hangul
     -- Telugu (plus one character of Kannada)
     | c >= '\x0C00' && c <= '\x0C80' =
-        if | c <= '\x0C04' -> combiningState  -- Combining characters
+        if | c == '\x0C00' -> combiningState  -- Combining characters
+           | c == '\x0C04' -> combiningState  -- Combining characters
            | c <= '\x0C39' -> narrowState     -- Main Telugu abugida
            | c == '\x0C3D' -> narrowState     -- Telugu avagraha
+           | c <= '\x0C40' -> combiningState  -- Vowel markers
+           | c <= '\x0C44' -> narrowState     -- Vowel markers
            | c <= '\x0C56' -> combiningState  -- Vowel markers
            | c == '\x0C62' -> combiningState  -- Combining character
            | c == '\x0C63' -> combiningState  -- Combining character
@@ -818,9 +827,9 @@ updateMatchStateNarrow (MatchState first tot _ _ Nothing) !c
     -- Tamil
     | c >= '\x0B80' && c <= '\x0BFF' =
         if | c <= '\x0B82' -> combiningState  -- Combining characters
-           | c <= '\x0BB9' -> narrowState     -- Main Tamil abugida
-           | c <= '\x0BCD' -> combiningState  -- Vowel markers
-           | c == '\x0BD7' -> combiningState  -- Combining character
+           | c == '\x0BC0' -> combiningState  -- Combining characters
+           | c == '\x0BCD' -> combiningState  -- Vowel markers
+           | c <= '\x0BCC' -> narrowState     -- Main Tamil abugida
            | otherwise     -> narrowState     -- Tamil digits and others
   where
     narrowState    = MatchState False (tot + 1) True 0 Nothing
@@ -848,7 +857,7 @@ updateMatchStateWide (MatchState first tot _ _ Nothing) !c
     -- Japanese
     | c >= '\x2E80' && c <= '\x324F' =
         if | c <= '\x3029' -> wideState       -- Punctuation and others
-           | c <= '\x302F' -> combiningState  -- Tone marks
+           | c <= '\x302D' -> combiningState  -- Tone marks
            | c == '\x303F' -> narrowState     -- Half-fill space
            | c <= '\x3096' -> wideState       -- Hiragana and others
            | c <= '\x309A' -> combiningState  -- Hiragana voiced marks
@@ -877,32 +886,41 @@ updateMatchStateWide (MatchState first tot _ _ Nothing) !c
            | c == '\x06E9' -> narrowState     -- Place of sajdah
            | c <= '\x06ED' -> combiningState  -- More combining
            | otherwise     -> narrowState     -- All the rest
-    -- Devanagari (plus one Bengali character)
-    | c >= '\x0900' && c <= '\x0980' =
-        if | c <= '\x0903' -> combiningState  -- Combining characters
+    -- Devanagari
+    | c >= '\x0900' && c <= '\x097F' =
+        if | c <= '\x0902' -> combiningState  -- Combining characters
            | c <= '\x0939' -> narrowState     -- Main Devanagari abugida
-           | c == '\x093D' -> narrowState     -- Devanagari avagraha
-           | c == '\x0950' -> narrowState     -- Devanagari om
+           | c == '\x093A' -> combiningState
+           | c == '\x093C' -> combiningState
+           | c <= '\x0940' -> narrowState     -- Main Devanagari abugida
+           | c <= '\x0948' -> combiningState  -- Combining characters
+           | c == '\x094D' -> combiningState  -- Combining characters
+           | c <= '\x0950' -> narrowState     -- Devanagari om
            | c <= '\x0957' -> combiningState  -- Combining characters
            | c == '\x0962' -> combiningState  -- Combining character
            | c == '\x0963' -> combiningState  -- Combining character
            | otherwise     -> narrowState     -- Devanagari digits and up to beginning of Bengali block
     -- Bengali (plus a couple Gurmukhi characters)
-    | c >= '\x0981' && c <= '\x0A03' =
-        if | c <= '\x0983' -> combiningState  -- Combining signs
-           | c <= '\x09B9' -> narrowState     -- Main Bengali abugida
-           | c == '\x09BD' -> narrowState     -- Bengali avagraha
-           | c == '\x09CE' -> narrowState     -- Bengali khanda ta
-           | c <= '\x09D7' -> combiningState  -- Combining marks
+    | c >= '\x0980' && c <= '\x0A02' =
+        if | c == '\x0981' -> combiningState  -- Combining signs
+           | c == '\x09BC' -> combiningState  -- Combining signs
+           | c <= '\x09C0' -> narrowState     -- Main Bengali abugida
+           | c <= '\x09C4' -> combiningState  -- Combining signs
+           | c == '\x09CD' -> combiningState  -- Combining signs
+           | c <= '\x09E1' -> narrowState     -- Bengali
+           | c <= '\x09E3' -> combiningState  -- Combining marks
            | c == '\x09E2' -> combiningState  -- Bengali vocalic vowel signs
            | c == '\x09E3' -> combiningState  -- Bengali vocalic vowel signs
            | c <= '\x09FD' -> narrowState     -- Bengali digits and other symbols
            | otherwise     -> combiningState  -- Bengali sandhi mark, plus a few symbols from Gurmukhi
     -- Telugu (plus one character of Kannada)
     | c >= '\x0C00' && c <= '\x0C80' =
-        if | c <= '\x0C04' -> combiningState  -- Combining characters
+        if | c == '\x0C00' -> combiningState  -- Combining characters
+           | c == '\x0C04' -> combiningState  -- Combining characters
            | c <= '\x0C39' -> narrowState     -- Main Telugu abugida
            | c == '\x0C3D' -> narrowState     -- Telugu avagraha
+           | c <= '\x0C40' -> combiningState  -- Vowel markers
+           | c <= '\x0C44' -> narrowState     -- Vowel markers
            | c <= '\x0C56' -> combiningState  -- Vowel markers
            | c == '\x0C62' -> combiningState  -- Combining character
            | c == '\x0C63' -> combiningState  -- Combining character
@@ -910,9 +928,9 @@ updateMatchStateWide (MatchState first tot _ _ Nothing) !c
     -- Tamil
     | c >= '\x0B80' && c <= '\x0BFF' =
         if | c <= '\x0B82' -> combiningState  -- Combining characters
-           | c <= '\x0BB9' -> narrowState     -- Main Tamil abugida
-           | c <= '\x0BCD' -> combiningState  -- Vowel markers
-           | c == '\x0BD7' -> combiningState  -- Combining character
+           | c == '\x0BC0' -> combiningState  -- Combining characters
+           | c == '\x0BCD' -> combiningState  -- Vowel markers
+           | c <= '\x0BCC' -> narrowState     -- Main Tamil abugida
            | otherwise     -> narrowState     -- Tamil digits and others
   where
     narrowState    = MatchState False (tot + 1) True 0 Nothing
