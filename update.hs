@@ -1,5 +1,5 @@
 #!/usr/bin/env stack
--- stack --resolver lts-18.10 script --package megaparsec --package bytestring --package pretty-show --package pretty
+-- stack --resolver lts-18.10 script --package megaparsec --package bytestring --package pretty-show --package pretty --package text
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Data.ByteString.Lazy as B
 import Data.Char (chr)
