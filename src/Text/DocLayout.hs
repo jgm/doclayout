@@ -584,7 +584,7 @@ minOffset = uncurry max . getOffset (> 0) (0,0)
 -- l = longest, c = current
 getOffset :: (IsString a, HasChars a)
           => (Int -> Bool) -> (Int, Int) -> Doc a -> (Int, Int)
-getOffset breakWhen (l, c) x =
+getOffset breakWhen (!l, !c) x =
   case x of
     Text n _ -> (l, c + n)
     Block n _ -> (l, c + n)
