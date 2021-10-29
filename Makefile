@@ -1,5 +1,5 @@
 all: src/Text/unicodeWidth.inc
-	stack test
+	stack test --test-arguments='--hide-successes --ansi-tricks=false'
 
 bench:
 	stack bench
