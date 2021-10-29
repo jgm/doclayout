@@ -15,7 +15,8 @@ category:            Text
 build-type:          Simple
 extra-source-files:  udhr/txt/*.txt,
                      udhr/README,
-                     udhr/languages.txt
+                     udhr/languages.txt,
+                     src/Text/unicodeWidth.inc
 data-files:          README.md
                      changelog.md
 cabal-version:       >=1.10
