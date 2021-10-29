@@ -575,41 +575,56 @@ afterBreak = AfterBreak
 
 -- | Returns the width of a 'Doc'.
 offset :: (IsString a, HasChars a) => Doc a -> Int
-offset (Text n _) = n
-offset (Block n _) = n
-offset (VFill n _) = n
-offset Empty = 0
-offset CarriageReturn = 0
-offset NewLine = 0
-offset (BlankLines _) = 0
-offset d = maximum (0 : map realLength (splitLines (render Nothing d)))
+offset = uncurry max . getOffset (const False) (0, 0)
 
 -- | Returns the minimal width of a 'Doc' when reflowed at breakable spaces.
 minOffset :: HasChars a => Doc a -> Int
-minOffset (Text n _) = n
-minOffset (Block n _) = n
-minOffset (VFill n _) = n
-minOffset Empty = 0
-minOffset CarriageReturn = 0
-minOffset NewLine = 0
-minOffset (BlankLines _) = 0
-minOffset d = maximum (0 : map realLength (splitLines (render (Just 0) d)))
+minOffset = uncurry max . getOffset (> 0) (0,0)
+
+-- l = longest, c = current
+getOffset :: (IsString a, HasChars a)
+          => (Int -> Bool) -> (Int, Int) -> Doc a -> (Int, Int)
+getOffset breakWhen (l, c) x =
+  case x of
+    Text n _ -> (l, c + n)
+    Block n _ -> (l, c + n)
+    VFill n _ -> (l, c + n)
+    Empty -> (l, c)
+    CarriageReturn -> (max l c, 0)
+    NewLine -> (max l c, 0)
+    BlankLines _ -> (max l c, 0)
+    Prefixed t d ->
+      let (l',c') = getOffset breakWhen (0, 0) d
+       in (max l (l' + realLength t), c' + realLength t)
+    BeforeNonBlank _ -> (l, c)
+    Flush d -> getOffset breakWhen (l, c) d
+    BreakingSpace
+      | breakWhen c -> (max l c, 0)
+      | otherwise -> (l, c + 1)
+    AfterBreak t -> if c == 0
+                       then (l, c + realLength t)
+                       else (l, c)
+    Concat (Concat d y) z ->
+      getOffset breakWhen (l, c) (Concat d (Concat y z))
+    Concat (BeforeNonBlank d) y ->
+      if isNonBlank y
+         then getOffset breakWhen (l, c) (Concat d y)
+         else getOffset breakWhen (l, c) y
+    Concat d y ->
+      let (l', c') = getOffset breakWhen (l, c) d
+       in getOffset breakWhen (l', c') y
+
+isNonBlank :: Doc a -> Bool
+isNonBlank (Text _ _) = True
+isNonBlank (BeforeNonBlank d) = isNonBlank d
+isNonBlank (Flush d) = isNonBlank d
+isNonBlank (Concat d _) = isNonBlank d
+isNonBlank _ = False
 
 -- | Returns the column that would be occupied by the last
 -- laid out character (assuming no wrapping).
 updateColumn :: HasChars a => Doc a -> Int -> Int
-updateColumn (Text !n _) !k = k + n
-updateColumn (Block !n _) !k = k + n
-updateColumn (VFill !n _) !k = k + n
-updateColumn Empty _ = 0
-updateColumn CarriageReturn _ = 0
-updateColumn NewLine _ = 0
-updateColumn (BlankLines _) _ = 0
-updateColumn d !k =
-  case splitLines (render Nothing d) of
-    []   -> k
-    [t]  -> k + realLength t
-    ts   -> realLength $ last ts
+updateColumn d k = snd . getOffset (const False) (0,k) $ d
 
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left.
