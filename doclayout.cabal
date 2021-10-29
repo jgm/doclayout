@@ -13,7 +13,9 @@ maintainer:          jgm@berkeley.edu
 copyright:           2016-19 John MacFarlane
 category:            Text
 build-type:          Simple
--- extra-source-files:
+extra-source-files:  udhr/txt/*.txt,
+                     udhr/README,
+                     udhr/languages.txt
 data-files:          README.md
                      changelog.md
 cabal-version:       >=1.10
@@ -61,9 +63,6 @@ benchmark doclayout-bench
                    mtl
   Ghc-Options:   -rtsopts -Wall -fno-warn-unused-do-bind
   Default-Language: Haskell2010
-  extra-source-files: udhr/txt/*.txt,
-                      udhr/README,
-                      udhr/languages.txt
 
 source-repository head
   type:     git
