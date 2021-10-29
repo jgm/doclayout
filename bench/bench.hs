@@ -32,7 +32,7 @@ main = do
     udhrThj <- udhrLang "thj"
     udhrGrk <- udhrLang "grk"
     emojiTxt <- evaluate . force . T.replicate 1000 $ mconcat baseEmojis <> mconcat zwjEmojis
-    defaultMainWith defaultConfig{ timeLimit = 10.0 } $
+    defaultMainWith defaultConfig{ timeLimit = 5.0 } $
       [ bench "sample document 2" $
           nf (render Nothing :: Doc Text -> Text)
              (nest 3 $ cblock 20 $ vcat $ replicate 15 $
