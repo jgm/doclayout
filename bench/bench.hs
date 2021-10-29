@@ -81,7 +81,7 @@ main = do
       , bench "UDHR Greek"      $ nf realLengthNarrowContext udhrGrk  -- Greek
       , bench "Emoji"           $ nf realLengthNarrowContext emojiTxt -- Emoji
       , bench "UDHR Mandarin (no shortcuts)" $
-          nf (realLengthWith $ updateMatchStateNoShortcut 2) udhrChn -- No shortcuts
+          nf (realLengthWith updateMatchStateNoShortcutWide) udhrChn -- No shortcuts
       ]
 
 -- | The Universal declaration of human rights in a given language, repeated 1000 times.
