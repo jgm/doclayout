@@ -18,7 +18,7 @@ src/Text/unicodeWidth.inc: EastAsianWidth.txt
 
 unicodeVersion = latest
 
-EastAsianWidth.txt: .FORCE
+EastAsianWidth.txt:
 	curl https://www.unicode.org/Public/UCD/$(unicodeVersion)/ucd/$@ > $@
 
 .PHONY: all clean bench repl prof .FORCE
