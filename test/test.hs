@@ -273,6 +273,11 @@ tests =
       (text "\870" <> space <> text "a")
       "\870 a"
 
+  , renderTest "newline after cr"  -- #20
+      Nothing
+      (literal "a" <> cr <> literal "\nb" <> cr <> literal "c")
+      "a\n\nb\nc"
+
   , testCase "length of normal text" $
       realLength ("This is going to be too long anyway" :: String) @?= 35
 

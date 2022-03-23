@@ -339,7 +339,6 @@ normalize (NewLine : BreakingSpace : xs) = normalize (NewLine : xs)
 normalize (NewLine : CarriageReturn : xs) = normalize (NewLine : xs)
 normalize (CarriageReturn : CarriageReturn : xs) =
   normalize (CarriageReturn : xs)
-normalize (CarriageReturn : NewLine : xs) = normalize (NewLine : xs)
 normalize (CarriageReturn : BlankLines m : xs) = normalize (BlankLines m : xs)
 normalize (CarriageReturn : BreakingSpace : xs) =
   normalize (CarriageReturn : xs)
