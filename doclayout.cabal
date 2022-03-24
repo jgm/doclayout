@@ -24,7 +24,7 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Text.DocLayout
-  build-depends:       base >= 4.9 && < 5,
+  build-depends:       base >= 4.12 && < 5,
                        text,
                        containers,
                        emojis >=0.1.2,

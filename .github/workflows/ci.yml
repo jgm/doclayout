@@ -10,10 +10,6 @@ jobs:
       fail-fast: false
       matrix:
         versions:
-          - ghc: '8.0.2'
-            cabal: '2.4'
-          - ghc: '8.2.2'
-            cabal: '2.4'
           - ghc: '8.4.4'
             cabal: '2.4'
           - ghc: '8.6.5'
@@ -24,14 +20,16 @@ jobs:
             cabal: '3.2'
           - ghc: '9.0.1'
             cabal: '3.4'
+          - ghc: '9.2.2'
+            cabal: '3.6'
     steps:
     - uses: actions/checkout@v1
-    - name: Install recent cabal/ghc
-      uses: haskell/actions/setup@v1
-      with:
-        ghc-version: ${{ matrix.versions.ghc }}
-        cabal-version: ${{ matrix.versions.cabal }}
+    - name: Install cabal/ghc
+      run: |
+        ghcup install ghc --set ${{ matrix.versions.ghc }}
+        ghcup install cabal ${{ matrix.versions.cabal }}
 
+ 
     - name: Install dependencies
       run: |
           cabal v2-update
