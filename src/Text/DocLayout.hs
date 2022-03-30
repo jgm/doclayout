@@ -502,7 +502,7 @@ literal x =
     intersperse NewLine $
       map (\s -> if isNull s
                     then Empty
-                    else Text (realLength s) s) $
+                    else Text (realLength $! s) s) $
         splitLines x
 {-# NOINLINE literal #-}
 
