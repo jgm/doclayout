@@ -7,7 +7,7 @@ jobs:
 
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         versions:
           - ghc: '8.6.5'
@@ -25,16 +25,15 @@ jobs:
     - name: Install cabal/ghc
       run: |
         ghcup install ghc --set ${{ matrix.versions.ghc }}
-        ghcup install cabal ${{ matrix.versions.cabal }}
+        ghcup install cabal --set ${{ matrix.versions.cabal }}
 
- 
     - name: Install dependencies
       run: |
           cabal v2-update
-          cabal v2-build --dependencies-only --enable-tests --enable-benchmarks --disable-optimization -fexecutable all
+          cabal v2-build --dependencies-only --enable-tests --enable-benchmarks --disable-optimization all
     - name: Build and test
       run: |
-          cabal v2-build --enable-tests --enable-benchmarks --disable-optimization -fexecutable all
+          cabal v2-build --enable-tests --enable-benchmarks --disable-optimization all
           cabal v2-test --disable-optimization all
 
   macos:
