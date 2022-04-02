@@ -16,7 +16,8 @@ import Data.Semigroup
 #endif
 
 main :: IO ()
-main = defaultMain $ testGroup "Tests" tests
+main = defaultMain $ localOption (mkTimeout (480 * 10^6)) $ testGroup "Tests" tests
+-- 8 minute timeout
 
 renderTest :: String -> Maybe Int -> Doc Text -> Text -> TestTree
 renderTest title mblen doc expected =
