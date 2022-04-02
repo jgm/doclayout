@@ -6,10 +6,9 @@
   * Remove `realLengthNoShortcut`, `isEmojiModifier`, and
     `isEmojiJoiner` [API change] (Stephen Morgan).
   * Add new exported functions `realLengthNarrowContext`,
-    `realLengthWideContext`, `realLengthWith`,
-    `updateMatchStateNoShortcut`,
-    `updateMatchStateNoShortcutWide`,
-    `isSkinToneModifier`, `isZWJ` [API change] (Stephen Morgan).
+    `realLengthWideContext`, `realLengthNarrowContextNoShortcut`,
+    `realLengthWideContextNoShortcut`, `isSkinToneModifier`, `isZWJ`
+    [API change] (Stephen Morgan).
   * Compute `realLength` strictly.
   * Make `getOffset` stricter.
   * Drop support for ghc <= 8.4, add test for ghc 9.2.
