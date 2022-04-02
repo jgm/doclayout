@@ -73,9 +73,9 @@ module Text.DocLayout (
      , realLength
      , realLengthNarrowContext
      , realLengthWideContext
-     , realLengthWith
-     , updateMatchStateNoShortcut
-     , updateMatchStateNoShortcutWide
+     , realLengthNarrowContextNoShortcut
+     , realLengthWideContextNoShortcut
+     -- * Char properties
      , isSkinToneModifier
      , isEmojiVariation
      , isZWJ
@@ -725,6 +725,16 @@ realLengthNarrowContext = realLengthWith updateMatchStateNarrow
 -- double-wide characters. Ambiguous characters are treated as width 2.
 realLengthWideContext :: HasChars a => a -> Int
 realLengthWideContext = realLengthWith updateMatchStateWide
+
+-- | Like 'realLengthNarrowContext', but avoids optimizations (shortcuts).
+-- This is exposed for testing, to ensure that the optimizations are safe.
+realLengthNarrowContextNoShortcut :: HasChars a => a -> Int
+realLengthNarrowContextNoShortcut = realLengthWith updateMatchStateNoShortcut
+
+-- | Like 'realLengthWideContext', but avoids optimizations (shortcuts).
+-- This is exposed for testing, to ensure that the optimizations are safe.
+realLengthWideContextNoShortcut :: HasChars a => a -> Int
+realLengthWideContextNoShortcut = realLengthWith updateMatchStateNoShortcutWide
 
 -- | Get real length of string, taking into account combining and double-wide
 -- characters, using the given accumulator. This is exposed for testing.
