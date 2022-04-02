@@ -34,7 +34,7 @@ jobs:
     - name: Build and test
       run: |
           cabal v2-build --enable-tests --enable-benchmarks --disable-optimization
-          cabal v2-test --disable-optimization --test-show-details=direct
+          cabal v2-test --disable-optimization
 
   macos:
 
