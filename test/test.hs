@@ -16,7 +16,7 @@ import Data.Semigroup
 #endif
 
 main :: IO ()
-main = defaultMain $ localOption (mkTimeout (60 * 10^6)) $ testGroup "Tests" tests
+main = defaultMain $ testGroup "Tests" tests
 
 renderTest :: String -> Maybe Int -> Doc Text -> Text -> TestTree
 renderTest title mblen doc expected =
@@ -317,9 +317,10 @@ tests =
   , testGroup "all zero-width joiner emoji sequences have width 2" $
       zwjEmojis <&> \emoji -> testCase (T.unpack emoji) $ realLength emoji @?= 2
 
-  , testProperty "shortcut provides same answer for string length in a narrow context" . withMaxSuccess 1000000 $
+  , testProperty "shortcut provides same answer for string length in a narrow context" . withMaxSuccess 100000 $
+
       \(x :: String) -> realLengthNarrowContext x === realLengthNarrowContextNoShortcut x
 
-  , testProperty "shortcut provides same answer for string length in a wide context" . withMaxSuccess 1000000 $
+  , testProperty "shortcut provides same answer for string length in a wide context" . withMaxSuccess 100000 $
       \(x :: String) -> realLengthWideContext x === realLengthWideContextNoShortcut x
   ]
