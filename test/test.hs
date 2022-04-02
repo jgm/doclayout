@@ -318,10 +318,10 @@ tests =
   , testGroup "all zero-width joiner emoji sequences have width 2" $
       zwjEmojis <&> \emoji -> testCase (T.unpack emoji) $ realLength emoji @?= 2
 
-  , testProperty "shortcut provides same answer for string length in a narrow context" . withMaxSuccess 100000 $
+  , testProperty "shortcut provides same answer for string length in a narrow context" . withMaxSuccess 10000 $
 
       \(x :: String) -> realLengthNarrowContext x === realLengthNarrowContextNoShortcut x
 
-  , testProperty "shortcut provides same answer for string length in a wide context" . withMaxSuccess 100000 $
+  , testProperty "shortcut provides same answer for string length in a wide context" . withMaxSuccess 10000 $
       \(x :: String) -> realLengthWideContext x === realLengthWideContextNoShortcut x
   ]
