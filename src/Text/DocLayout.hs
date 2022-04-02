@@ -730,13 +730,11 @@ realLengthWideContext = realLengthWith updateMatchStateWide
 -- This is exposed for testing, to ensure that the optimizations are safe.
 realLengthNarrowContextNoShortcut :: HasChars a => a -> Int
 realLengthNarrowContextNoShortcut = realLengthWith updateMatchStateNoShortcut
-{-# INLINE realLengthNarrowContextNoShortcut #-}
 
 -- | Like 'realLengthWideContext', but avoids optimizations (shortcuts).
 -- This is exposed for testing, to ensure that the optimizations are safe.
 realLengthWideContextNoShortcut :: HasChars a => a -> Int
 realLengthWideContextNoShortcut = realLengthWith updateMatchStateNoShortcutWide
-{-# INLINE realLengthWideContextNoShortcut #-}
 
 -- | Get real length of string, taking into account combining and double-wide
 -- characters, using the given accumulator. This is exposed for testing.
