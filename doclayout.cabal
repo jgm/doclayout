@@ -57,7 +57,7 @@ benchmark doclayout-bench
   Hs-Source-Dirs:  bench
   Build-Depends:   doclayout,
                    base >= 4.8 && < 5,
-                   criterion >= 1.0 && < 1.6,
+                   criterion >= 1.0,
                    deepseq,
                    text,
                    emojis >= 0.1.2,
