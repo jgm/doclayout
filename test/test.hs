@@ -15,8 +15,11 @@ import qualified Data.Text as T
 import Data.Semigroup
 #endif
 
+timeout :: Integer
+timeout = 480 * 10^(6 :: Int)
+
 main :: IO ()
-main = defaultMain $ localOption (mkTimeout (480 * 10^6)) $ testGroup "Tests" tests
+main = defaultMain $ localOption (mkTimeout timeout) $ testGroup "Tests" tests
 -- 8 minute timeout
 
 renderTest :: String -> Maybe Int -> Doc Text -> Text -> TestTree
