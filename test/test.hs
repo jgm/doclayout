@@ -37,6 +37,11 @@ tests =
       (lblock 4 (text "hi there" :: Doc Text))
       "hi t\nhere"
 
+  , renderTest "lblock with blank line"
+      Nothing
+      (Block 5 ["a", "", "b"] :: Doc Text)
+      "a\nb"
+
   , renderTest "nesting should not wrap"
       (Just 10)
       (nest 3 (text "abcdefghi" :: Doc Text))
