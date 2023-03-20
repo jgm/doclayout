@@ -367,6 +367,8 @@ mergeBlocks h (w1,lns1) (w2,lns2) =
 renderList :: HasChars a => [Doc a] -> DocState a
 renderList [] = return ()
 
+renderList (Empty : xs) = renderList xs
+
 renderList (Text off s : xs) = do
   outp off s
   renderList xs
