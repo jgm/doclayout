@@ -1,5 +1,10 @@
 # doclayout
 
+## 0.4.0.1
+
+  * Add clause for Empty to renderList (#22).
+  * Remove upper bound for criterion
+
 ## 0.4
 
   * Expose `unfoldD` [API change].
