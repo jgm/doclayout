@@ -1,17 +1,11 @@
 all: src/Text/unicodeWidth.inc
-	stack test --test-arguments='--hide-successes --ansi-tricks=false'
+	cabal test --test-options='--hide-successes --ansi-tricks=false'
 
 bench:
-	stack bench
+	cabal bench
 
 clean:
-	stack clean
-
-prof:
-	stack build --profile
-
-repl:
-	stack ghci src/Text/DocLayout.hs --ghc-options=-XOverloadedStrings
+	cabal clean
 
 src/Text/unicodeWidth.inc: EastAsianWidth.txt
 	./update.hs > $@
@@ -21,4 +15,4 @@ unicodeVersion = latest
 EastAsianWidth.txt:
 	curl https://www.unicode.org/Public/UCD/$(unicodeVersion)/ucd/$@ > $@
 
-.PHONY: all clean bench repl prof .FORCE
+.PHONY: all clean bench .FORCE
