@@ -94,7 +94,8 @@ import Control.Monad
 import Control.Monad.State.Strict
 import GHC.Generics
 import Data.Bifunctor (second)
-import Data.Char (isSpace, ord)
+import Data.Char (isSpace, ord,
+                  generalCategory, GeneralCategory(NonSpacingMark))
 import Data.List (foldl', intersperse)
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as M
@@ -711,7 +712,10 @@ doubleQuotes = inside (char '"') (char '"')
 -- character, 1 for a regular character, 2 for an East Asian wide character.
 -- Ambiguous characters are treated as width 1.
 charWidth :: Char -> Int
-charWidth = extractLength . updateMatchStateNarrow (MatchState False 0 ' ' 0)
+charWidth c
+  | generalCategory c == NonSpacingMark = 0
+  | otherwise = extractLength .
+                updateMatchStateNarrow (MatchState False 0 ' ' 0) $ c
 
 -- | Get real length of string, taking into account combining and double-wide
 -- characters. Ambiguous characters are treated as width 1.
