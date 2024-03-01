@@ -167,6 +167,7 @@ data Doc a = Text Int a            -- ^ Text with specified width.
          | NewLine                 -- ^ newline.
          | BlankLines Int          -- ^ Ensure a number of blank lines.
          | Concat (Doc a) (Doc a)  -- ^ Two documents concatenated.
+         | ANSI a a (Doc a)
          | Empty
          deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
                   Data, Typeable, Generic)
@@ -277,6 +278,8 @@ data RenderState a = RenderState{
        , lineLength :: Maybe Int  -- ^ 'Nothing' means no wrapping
        , column     :: Int
        , newlines   :: Int        -- ^ Number of preceding newlines
+       , ansiOpen   :: a
+       , ansiClose  :: a
        }
 
 newline :: HasChars a => DocState a
@@ -285,9 +288,9 @@ newline = do
   let rawpref = prefix st'
   when (column st' == 0 && usePrefix st' && not (T.null rawpref)) $ do
      let pref = fromString $ T.unpack $ T.dropWhileEnd isSpace rawpref
-     modify $ \st -> st{ output = pref : output st
+     modify $ \st -> st{ output = ansiOpen st : pref : output st
                        , column = column st + realLength pref }
-  modify $ \st -> st { output = "\n" : output st
+  modify $ \st -> st { output = "\n" : ansiClose st : output st
                      , column = 0
                      , newlines = newlines st + 1
                      }
@@ -295,9 +298,12 @@ newline = do
 outp :: HasChars a => Int -> a -> DocState a
 outp off s = do           -- offset >= 0 (0 might be combining char)
   st' <- get
-  let pref = fromString $ T.unpack $ prefix st'
-  when (column st' == 0 && usePrefix st' && not (isNull pref)) $
-    modify $ \st -> st{ output = pref : output st
+  let pref = if usePrefix st' then fromString $ T.unpack $ prefix st' else mempty
+  -- let pref = fromString $ T.unpack $ prefix st'
+  let open = ansiOpen st'
+  when (column st' == 0 && not (isNull pref && isNull open)) $
+  -- when (column st' == 0 && usePrefix st' && not (isNull pref)) $
+    modify $ \st -> st{ output = ansiOpen st : pref : output st
                     , column = column st + realLength pref }
   modify $ \st -> st{ output = s : output st
                     , column = column st + off
@@ -315,7 +321,9 @@ render linelen doc = mconcat . reverse . output $
                           , usePrefix = True
                           , lineLength = linelen
                           , column = 0
-                          , newlines = 2 }
+                          , newlines = 2
+                          , ansiOpen = mempty
+                          , ansiClose = mempty }
 
 renderDoc :: HasChars a => Doc a -> DocState a
 renderDoc = renderList . normalize . unfoldD
@@ -371,6 +379,15 @@ renderList (Empty : xs) = renderList xs
 
 renderList (Text off s : xs) = do
   outp off s
+  renderList xs
+
+renderList (ANSI open close doc : xs) = do
+  st <- get
+  let oldOpen = ansiOpen st
+  let oldClose = ansiClose st
+  put st{ ansiOpen = oldOpen <> open, ansiClose = close <> oldClose, output = open : output st}
+  renderDoc doc
+  modify $ \s -> s{ ansiOpen = oldOpen, ansiClose = oldClose, output = close : output s }
   renderList xs
 
 renderList (Prefixed pref d : xs) = do
@@ -483,6 +500,7 @@ startsBlank NewLine            = True
 startsBlank (BlankLines _)     = True
 startsBlank (Concat Empty y)   = startsBlank y
 startsBlank (Concat x _)       = startsBlank x
+startsBlank (ANSI _ _ x)       = startsBlank x
 startsBlank Empty              = True
 
 isBlock :: Doc a -> Bool
@@ -593,6 +611,7 @@ getOffset breakWhen (!l, !c) x =
     Block n _ -> (l, c + n)
     VFill n _ -> (l, c + n)
     Empty -> (l, c)
+    ANSI _ _ d -> getOffset breakWhen (l, c) d
     CarriageReturn -> (max l c, 0)
     NewLine -> (max l c, 0)
     BlankLines _ -> (max l c, 0)
