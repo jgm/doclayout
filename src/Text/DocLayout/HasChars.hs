@@ -16,7 +16,9 @@ import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Text (Text)
-import Data.List (foldl')
+import Data.List (foldl', uncons)
+import Data.Maybe (fromMaybe)
+import Text.DocLayout.Attributed
 
 -- | Class abstracting over various string types that
 -- can fold over characters.  Minimal definition is 'foldrChar'
@@ -56,3 +58,25 @@ instance HasChars TL.Text where
   splitLines        = TL.splitOn "\n"
   replicateChar n c = TL.replicate (fromIntegral n) (TL.singleton c)
   isNull            = TL.null
+
+instance HasChars a => HasChars (Attributed a) where
+  foldrChar _ acc Null = acc
+  foldrChar f acc (Attr _ x) = foldrChar f acc x
+  foldrChar f acc (Concattr x y) = foldrChar f (foldrChar f acc y) x
+  foldlChar _ acc Null = acc
+  foldlChar f acc (Attr _ x) = foldlChar f acc x
+  foldlChar f acc (Concattr x y) = foldlChar f (foldlChar f acc x) y
+  splitLines s              = reverse $ go ([], Null) [s]
+    where
+      split' Null           = Just []
+      split' (Attr f x)     = Just (Attr f <$> splitLines x)
+      split' Concattr{}     = Nothing
+      go (lns, cur) []       = cur : lns
+      go (lns, cur) [Null]   = cur : lns
+      go (lns, cur) ((Concattr x y) : rest) = go (lns, cur) (x : y : rest)
+      go (lns, cur) (b : bs) =
+        case fromMaybe [] $ split' b of
+          []      -> go (cur : lns, Null) bs
+          [k1]    -> go (lns, cur <> k1) bs
+          k1 : ks -> let (end, most) = fromMaybe (Null, []) $ uncons $ reverse ks in
+                         go (most ++ (cur <> k1) : lns, end) bs
