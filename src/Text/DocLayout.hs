@@ -27,6 +27,8 @@ blocks for tables.
 module Text.DocLayout (
      -- * Rendering
        render
+     , renderPlain
+     , renderANSI
      -- * Doc constructors
      , cr
      , blankline
@@ -54,6 +56,9 @@ module Text.DocLayout (
      , parens
      , quotes
      , doubleQuotes
+     , bold
+     , italic
+     , underlined
      , empty
      -- * Functions for concatenating documents
      , (<+>)
@@ -104,6 +109,8 @@ import Data.String
 import qualified Data.Text as T
 import Data.Text (Text)
 import Text.DocLayout.HasChars
+import Text.DocLayout.ANSIFont
+import Text.DocLayout.Attributed
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup
@@ -113,10 +120,11 @@ import Text.Emoji (baseEmojis)
 
 -- | Document, including structure relevant for layout.
 data Doc a = Text Int a            -- ^ Text with specified width.
-         | Block Int [a]           -- ^ A block with a width and lines.
+         | Block Int [Attributed a]           -- ^ A block with a width and lines.
          | VFill Int a             -- ^ A vertically expandable block;
                  -- when concatenated with a block, expands to height
                  -- of block, with each line containing the specified text.
+         | CookedText Int (Attributed a) -- ^ Text which doesn't need further cooking
          | Prefixed Text (Doc a)   -- ^ Doc with each line prefixed with text.
                  -- Note that trailing blanks are omitted from the prefix
                  -- when the line after it is empty.
@@ -128,9 +136,11 @@ data Doc a = Text Int a            -- ^ Text with specified width.
          | NewLine                 -- ^ newline.
          | BlankLines Int          -- ^ Ensure a number of blank lines.
          | Concat (Doc a) (Doc a)  -- ^ Two documents concatenated.
+         | Styled StyleReq (Doc a)
          | Empty
          deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
                   Data, Typeable, Generic)
+
 
 instance Semigroup (Doc a) where
   x <> Empty = x
@@ -232,13 +242,19 @@ chomp d =
 type DocState a = State (RenderState a) ()
 
 data RenderState a = RenderState{
-         output     :: [a]        -- ^ In reverse order
+         output     :: [Attributed a]        -- ^ In reverse order
        , prefix     :: Text
        , usePrefix  :: Bool
        , lineLength :: Maybe Int  -- ^ 'Nothing' means no wrapping
        , column     :: Int
        , newlines   :: Int        -- ^ Number of preceding newlines
+       , fontStack  :: [Font]
        }
+
+peekFont :: RenderState a -> Font
+peekFont st = case fontStack st of
+                [] -> baseFont
+                x:_ -> x
 
 newline :: HasChars a => DocState a
 newline = do
@@ -246,9 +262,9 @@ newline = do
   let rawpref = prefix st'
   when (column st' == 0 && usePrefix st' && not (T.null rawpref)) $ do
      let pref = fromString $ T.unpack $ T.dropWhileEnd isSpace rawpref
-     modify $ \st -> st{ output = pref : output st
+     modify $ \st -> st{ output = Attr baseFont pref : output st
                        , column = column st + realLength pref }
-  modify $ \st -> st { output = "\n" : output st
+  modify $ \st -> st { output = Attr baseFont "\n" : output st
                      , column = 0
                      , newlines = newlines st + 1
                      }
@@ -256,11 +272,12 @@ newline = do
 outp :: HasChars a => Int -> a -> DocState a
 outp off s = do           -- offset >= 0 (0 might be combining char)
   st' <- get
-  let pref = fromString $ T.unpack $ prefix st'
-  when (column st' == 0 && usePrefix st' && not (isNull pref)) $
-    modify $ \st -> st{ output = pref : output st
+  let pref = if usePrefix st' then fromString $ T.unpack $ prefix st' else mempty
+  let font = peekFont st'
+  when (column st' == 0 && not (isNull pref && font == baseFont)) $
+    modify $ \st -> st{ output = Attr baseFont pref : output st
                     , column = column st + realLength pref }
-  modify $ \st -> st{ output = s : output st
+  modify $ \st -> st{ output = Attr font s : output st
                     , column = column st + off
                     , newlines = 0 }
 
@@ -268,7 +285,29 @@ outp off s = do           -- offset >= 0 (0 might be combining char)
 -- a line length of @n@ to reflow text on breakable spaces.
 -- @render Nothing@ will not reflow text.
 render :: HasChars a => Maybe Int -> Doc a -> a
-render linelen doc = mconcat . reverse . output $
+render = renderPlain
+
+renderANSI :: HasChars a => Maybe Int -> Doc a -> a
+renderANSI n = attrRender . prerender n
+
+renderPlain :: HasChars a => Maybe Int -> Doc a -> a
+renderPlain n = attrStrip . prerender n
+
+attrStrip :: HasChars a => Attributed a -> a
+attrStrip Null = ""
+attrStrip (Attr _ y) | isNull y = ""
+                     | otherwise = y
+attrStrip (Concattr x y) = attrStrip x <> attrStrip y
+
+attrRender :: HasChars a => Attributed a -> a
+attrRender a = go a <> renderFont baseFont where
+  go Null = ""
+  go (Attr f y) | isNull y = ""
+                | otherwise = renderFont f <> y
+  go (Concattr x y) = go x <> go y
+
+prerender :: HasChars a => Maybe Int -> Doc a -> Attributed a
+prerender linelen doc = mconcat . reverse . output $
   execState (renderDoc doc) startingState
    where startingState = RenderState{
                             output = mempty
@@ -276,7 +315,8 @@ render linelen doc = mconcat . reverse . output $
                           , usePrefix = True
                           , lineLength = linelen
                           , column = 0
-                          , newlines = 2 }
+                          , newlines = 2
+                          , fontStack = [] }
 
 renderDoc :: HasChars a => Doc a -> DocState a
 renderDoc = renderList . normalize . unfoldD
@@ -332,6 +372,26 @@ renderList (Empty : xs) = renderList xs
 
 renderList (Text off s : xs) = do
   outp off s
+  renderList xs
+
+renderList (CookedText off s : xs) = do
+  st' <- get
+  let pref = if usePrefix st' then fromString $ T.unpack $ prefix st' else mempty
+  when (column st' == 0 && not (isNull pref))  $
+    modify $ \st -> st{ output = Attr baseFont pref : output st
+                      , column = column st + realLength pref }
+  modify $ \st -> st{ output = s : output st
+                    , column = column st + off
+                    , newlines = 0 }
+  renderList xs
+
+renderList (Styled style doc : xs) = do
+  st <- get
+  let prevFont = peekFont st
+  let nextFont = prevFont ~> style
+  modify $ \s -> s{fontStack = nextFont : fontStack s}
+  renderDoc doc
+  modify $ \s -> s{ fontStack = fontStack st, output = output s }
   renderList xs
 
 renderList (Prefixed pref d : xs) = do
@@ -394,22 +454,23 @@ renderList (AfterBreak t : xs) = do
      else renderList xs
 
 renderList (b : xs) | isBlock b = do
+  st <- get
+  let font = peekFont st
   let (bs, rest) = span isBlock xs
   -- ensure we have right padding unless end of line
   let heightOf (Block _ ls) = length ls
       heightOf _            = 1
   let maxheight = maximum $ map heightOf (b:bs)
   let toBlockSpec (Block w ls) = (w, ls)
-      toBlockSpec (VFill w t)  = (w, take maxheight $ repeat t)
+      toBlockSpec (VFill w t)  = (w, map (Attr font) (take maxheight $ repeat t))
       toBlockSpec _            = (0, [])
   let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
                              (map toBlockSpec bs)
-  st <- get
   let oldPref = prefix st
   case column st - realLength oldPref of
         n | n > 0 -> modify $ \s -> s{ prefix = oldPref <> T.replicate n " " }
         _ -> return ()
-  renderList $ intersperse CarriageReturn (map literal lns')
+  renderList $ intersperse CarriageReturn (map cook lns')
   modify $ \s -> s{ prefix = oldPref }
   renderList rest
 
@@ -432,6 +493,7 @@ startsBlank' t = fromMaybe False $ foldlChar go Nothing t
 
 startsBlank :: HasChars a => Doc a -> Bool
 startsBlank (Text _ t)         = startsBlank' t
+startsBlank (CookedText _ t)   = startsBlank' t
 startsBlank (Block n ls)       = n > 0 && all startsBlank' ls
 startsBlank (VFill n t)        = n > 0 && startsBlank' t
 startsBlank (BeforeNonBlank x) = startsBlank x
@@ -444,6 +506,7 @@ startsBlank NewLine            = True
 startsBlank (BlankLines _)     = True
 startsBlank (Concat Empty y)   = startsBlank y
 startsBlank (Concat x _)       = startsBlank x
+startsBlank (Styled _ x)       = startsBlank x
 startsBlank Empty              = True
 
 isBlock :: Doc a -> Bool
@@ -452,11 +515,12 @@ isBlock VFill{} = True
 isBlock _       = False
 
 offsetOf :: Doc a -> Int
-offsetOf (Text o _)      = o
-offsetOf (Block w _)     = w
-offsetOf (VFill w _)     = w
-offsetOf BreakingSpace   = 1
-offsetOf _               = 0
+offsetOf (Text o _)       = o
+offsetOf (Block w _)      = w
+offsetOf (VFill w _)      = w
+offsetOf (CookedText w _) = w
+offsetOf BreakingSpace    = 1
+offsetOf _                = 0
 
 -- | Create a 'Doc' from a stringlike value.
 literal :: HasChars a => a -> Doc a
@@ -469,6 +533,10 @@ literal x =
                           in Text len s) $
         splitLines x
 {-# NOINLINE literal #-}
+
+cook :: HasChars a => Attributed a -> Doc a
+cook x | isNull x = Empty
+       | otherwise = let !len = realLength x in CookedText len x
 
 -- | A literal string.  (Like 'literal', but restricted to String.)
 text :: HasChars a => String -> Doc a
@@ -553,7 +621,9 @@ getOffset breakWhen (!l, !c) x =
     Text n _ -> (l, c + n)
     Block n _ -> (l, c + n)
     VFill n _ -> (l, c + n)
+    CookedText n _ -> (l, c + n)
     Empty -> (l, c)
+    Styled _ d -> getOffset breakWhen (l, c) d
     CarriageReturn -> (max l c, 0)
     NewLine -> (max l c, 0)
     BlankLines _ -> (max l c, 0)
@@ -607,12 +677,14 @@ cblock w = block (\s -> replicateChar ((w - realLength s) `div` 2) ' ' <> s) w
 height :: HasChars a => Doc a -> Int
 height = length . splitLines . render Nothing
 
-block :: HasChars a => (a -> a) -> Int -> Doc a -> Doc a
+block :: HasChars a => (Attributed a -> Attributed a) -> Int -> Doc a -> Doc a
 block filler width d
   | width < 1 && not (isEmpty d) = block filler 1 d
   | otherwise                    = Block width ls
      where
-       ls = map filler $ chop width $ render (Just width) d
+       preimage = prerender (Just width) d
+       reboxed = chop width preimage
+       ls = map filler reboxed
 
 -- | An expandable border that, when placed next to a box,
 -- expands to the height of the box.  Strings cycle through the
@@ -667,6 +739,19 @@ quotes = inside (char '\'') (char '\'')
 -- | Wraps a 'Doc' in double quotes.
 doubleQuotes :: HasChars a => Doc a -> Doc a
 doubleQuotes = inside (char '"') (char '"')
+
+styled :: HasChars a => StyleReq -> Doc a -> Doc a
+styled _ Empty = Empty
+styled s x = Styled s x
+
+bold :: HasChars a => Doc a -> Doc a
+bold = styled (RWeight Bold)
+
+italic :: HasChars a => Doc a -> Doc a
+italic = styled (RShape Italic)
+
+underlined :: HasChars a => Doc a -> Doc a
+underlined = styled (RUnderline ULSingle)
 
 -- | Returns width of a character in a monospace font:  0 for a combining
 -- character, 1 for a regular character, 2 for an East Asian wide character.
