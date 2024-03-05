@@ -102,53 +102,14 @@ import qualified Data.Map.Internal as MInt
 import Data.Data (Data, Typeable)
 import Data.String
 import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
 import Data.Text (Text)
+import Text.DocLayout.HasChars
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup
 #endif
 import Text.Emoji (baseEmojis)
 
-
--- | Class abstracting over various string types that
--- can fold over characters.  Minimal definition is 'foldrChar'
--- and 'foldlChar', but defining the other methods can give better
--- performance.
-class (IsString a, Semigroup a, Monoid a, Show a) => HasChars a where
-  foldrChar     :: (Char -> b -> b) -> b -> a -> b
-  foldlChar     :: (b -> Char -> b) -> b -> a -> b
-  replicateChar :: Int -> Char -> a
-  replicateChar n c = fromString (replicate n c)
-  isNull        :: a -> Bool
-  isNull = foldrChar (\_ _ -> False) True
-  splitLines    :: a -> [a]
-  splitLines s = (fromString firstline : otherlines)
-   where
-    (firstline, otherlines) = foldrChar go ([],[]) s
-    go '\n' (cur,lns) = ([], fromString cur : lns)
-    go c    (cur,lns) = (c:cur, lns)
-
-instance HasChars Text where
-  foldrChar         = T.foldr
-  foldlChar         = T.foldl'
-  splitLines        = T.splitOn "\n"
-  replicateChar n c = T.replicate n (T.singleton c)
-  isNull            = T.null
-
-instance HasChars String where
-  foldrChar     = foldr
-  foldlChar     = foldl'
-  splitLines    = lines . (++"\n")
-  replicateChar = replicate
-  isNull        = null
-
-instance HasChars TL.Text where
-  foldrChar         = TL.foldr
-  foldlChar         = TL.foldl'
-  splitLines        = TL.splitOn "\n"
-  replicateChar n c = TL.replicate (fromIntegral n) (TL.singleton c)
-  isNull            = TL.null
 
 -- | Document, including structure relevant for layout.
 data Doc a = Text Int a            -- ^ Text with specified width.
