@@ -11,6 +11,8 @@ import Data.Text (Text)
 import Data.List (foldl', uncons)
 import Data.Maybe (fromMaybe)
 import Text.DocLayout.Attributed
+import Data.Sequence (Seq(..), (|>))
+import qualified Data.Sequence as S
 
 -- | Class abstracting over various string types that
 -- can fold over characters.  Minimal definition is 'foldrChar'
@@ -51,24 +53,29 @@ instance HasChars TL.Text where
   replicateChar n c = TL.replicate (fromIntegral n) (TL.singleton c)
   isNull            = TL.null
 
-instance HasChars a => HasChars (Attributed a) where
-  foldrChar _ acc Null = acc
-  foldrChar f acc (Attr _ x) = foldrChar f acc x
-  foldrChar f acc (Concattr x y) = foldrChar f (foldrChar f acc y) x
-  foldlChar _ acc Null = acc
-  foldlChar f acc (Attr _ x) = foldlChar f acc x
-  foldlChar f acc (Concattr x y) = foldlChar f (foldlChar f acc x) y
-  splitLines s              = reverse $ go ([], Null) [s]
+instance HasChars a => HasChars (Attr a) where
+  foldrChar f a (Attr _ x) = foldrChar f a x
+  foldlChar f a (Attr _ x) = foldlChar f a x
+  splitLines (Attr f x) = Attr f <$> splitLines x
+
+instance (HasChars a) => HasChars (Attributed a) where
+  foldrChar _ acc (Attributed S.Empty) = acc
+  foldrChar f acc (Attributed (xs :|> (Attr _ x))) =
+    let l = foldrChar f acc x
+        innerFold e a = foldrChar f a e
+     in foldr innerFold l xs
+  foldlChar _ acc (Attributed S.Empty) = acc
+  foldlChar f acc (Attributed ((Attr _ x) :<| xs)) =
+    let l = foldlChar f acc x
+        innerFold e a = foldlChar f a e
+     in foldr innerFold l xs
+  splitLines (Attributed s) = fmap Attributed $ reverse $ go ([], S.empty) s
     where
-      split' Null           = Just []
-      split' (Attr f x)     = Just (Attr f <$> splitLines x)
-      split' Concattr{}     = Nothing
-      go (lns, cur) []       = cur : lns
-      go (lns, cur) [Null]   = cur : lns
-      go (lns, cur) ((Concattr x y) : rest) = go (lns, cur) (x : y : rest)
-      go (lns, cur) (b : bs) =
-        case fromMaybe [] $ split' b of
-          []      -> go (cur : lns, Null) bs
-          [k1]    -> go (lns, cur <> k1) bs
-          k1 : ks -> let (end, most) = fromMaybe (Null, []) $ uncons $ reverse ks in
-                         go (most ++ (cur <> k1) : lns, end) bs
+      go (lns, cur) S.Empty = cur : lns
+      go (lns, cur) (x :<| xs) =
+        case splitLines x of
+          []      -> go (cur : lns, S.empty) xs
+          [k1]    -> go (lns, cur |> k1) xs
+          k1 : ks ->
+            let (end, most) = fromMaybe (S.empty, []) $ uncons $ reverse $ S.singleton <$> ks
+             in go (most ++ (cur |> k1) : lns, end) xs
