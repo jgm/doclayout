@@ -1,32 +1,45 @@
 {-# LANGUAGE DeriveGeneric      #-}
 {-# LANGUAGE DeriveTraversable  #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-module Text.DocLayout.Attributed (Attributed(..))
+{-# LANGUAGE FlexibleInstances #-}
+module Text.DocLayout.Attributed (Attributed(..), Attr(..), fromList, singleton)
   where
 
 import Data.String
 import Text.DocLayout.ANSIFont (Font, baseFont)
 import Data.Data (Data, Typeable)
 import GHC.Generics
+import Data.Sequence ((><))
+import qualified Data.Sequence as S
 
-data Attributed a = Attr Font a
-                  | Concattr (Attributed a) (Attributed a)
-                  | Null
+data Attr a = Attr Font a
   deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
-          Data, Typeable, Generic)
+    Data, Typeable, Generic)
 
-instance Semigroup a => Semigroup (Attributed a) where
-  (<>) a@(Attr f1 x1) b@(Attr f2 x2)
-    | f1 == f2  = Attr f1 (x1 <> x2)
-    | otherwise = Concattr a b
-  (<>) (Concattr a b) c = Concattr a (b <> c)
-  (<>) a@(Attr _ _) (Concattr b c) = Concattr (a <> b) c
-  (<>) Null b = b
-  (<>) a Null = a
+instance Semigroup a => Semigroup (Attr a) where
+  (<>) (Attr f x) (Attr _ y) = Attr f $ x <> y  -- This is arbitrary
 
-instance Monoid a => Monoid (Attributed a) where
-  mempty = Null
+instance (IsString a, Monoid a) => Monoid (Attr a) where
+  mempty = Attr baseFont (fromString "")
+
+newtype Attributed a = Attributed (S.Seq (Attr a))
+  deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
+         Data, Typeable, Generic)
+
+fromList :: [Attr a] -> Attributed a
+fromList = Attributed . S.fromList
+
+singleton :: Attr a -> Attributed a
+singleton = Attributed . S.singleton
+
+instance IsString a => IsString (Attr a) where
+  fromString x = Attr baseFont (fromString x)
 
 instance IsString a => IsString (Attributed a) where
-  fromString x | null x = Null
-               | otherwise = Attr baseFont (fromString x)
+  fromString x = Attributed $ S.singleton $ Attr baseFont (fromString x)
+
+instance Semigroup a => Semigroup (Attributed a) where
+  (<>) (Attributed a) (Attributed b) = Attributed $ a >< b
+
+instance Monoid a => Monoid (Attributed a) where
+  mempty = Attributed S.empty

@@ -105,6 +105,7 @@ import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as M
 import qualified Data.Map.Internal as MInt
 import Data.Data (Data, Typeable)
+import Data.Foldable (toList)
 import Data.String
 import qualified Data.Text as T
 import Data.Text (Text)
@@ -242,7 +243,7 @@ chomp d =
 type DocState a = State (RenderState a) ()
 
 data RenderState a = RenderState{
-         output     :: [Attributed a]        -- ^ In reverse order
+         output     :: [Attr a]        -- ^ In reverse order
        , prefix     :: Text
        , usePrefix  :: Bool
        , lineLength :: Maybe Int  -- ^ 'Nothing' means no wrapping
@@ -288,26 +289,24 @@ render :: HasChars a => Maybe Int -> Doc a -> a
 render = renderPlain
 
 renderANSI :: HasChars a => Maybe Int -> Doc a -> a
-renderANSI n = attrRender . prerender n
+renderANSI n d = go $ prerender n d where
+  go (Attributed s) = foldMap attrRender s
 
 renderPlain :: HasChars a => Maybe Int -> Doc a -> a
-renderPlain n = attrStrip . prerender n
+renderPlain n d = go $ prerender n d where
+  go (Attributed s) = foldMap attrStrip s
 
-attrStrip :: HasChars a => Attributed a -> a
-attrStrip Null = ""
+attrStrip :: HasChars a => Attr a -> a
 attrStrip (Attr _ y) | isNull y = ""
                      | otherwise = y
-attrStrip (Concattr x y) = attrStrip x <> attrStrip y
 
-attrRender :: HasChars a => Attributed a -> a
+attrRender :: HasChars a => Attr a -> a
 attrRender a = go a <> renderFont baseFont where
-  go Null = ""
   go (Attr f y) | isNull y = ""
                 | otherwise = renderFont f <> y
-  go (Concattr x y) = go x <> go y
 
 prerender :: HasChars a => Maybe Int -> Doc a -> Attributed a
-prerender linelen doc = mconcat . reverse . output $
+prerender linelen doc = fromList . reverse . output $
   execState (renderDoc doc) startingState
    where startingState = RenderState{
                             output = mempty
@@ -377,10 +376,11 @@ renderList (Text off s : xs) = do
 renderList (CookedText off s : xs) = do
   st' <- get
   let pref = if usePrefix st' then fromString $ T.unpack $ prefix st' else mempty
+  let elems (Attributed x) = reverse $ toList x
   when (column st' == 0 && not (isNull pref))  $
     modify $ \st -> st{ output = Attr baseFont pref : output st
                       , column = column st + realLength pref }
-  modify $ \st -> st{ output = s : output st
+  modify $ \st -> st{ output = elems s ++ output st
                     , column = column st + off
                     , newlines = 0 }
   renderList xs
@@ -462,7 +462,7 @@ renderList (b : xs) | isBlock b = do
       heightOf _            = 1
   let maxheight = maximum $ map heightOf (b:bs)
   let toBlockSpec (Block w ls) = (w, ls)
-      toBlockSpec (VFill w t)  = (w, map (Attr font) (take maxheight $ repeat t))
+      toBlockSpec (VFill w t)  = (w, map (singleton . (Attr font)) (take maxheight $ repeat t))
       toBlockSpec _            = (0, [])
   let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
                              (map toBlockSpec bs)
