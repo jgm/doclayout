@@ -289,8 +289,8 @@ render :: HasChars a => Maybe Int -> Doc a -> a
 render = renderPlain
 
 renderANSI :: HasChars a => Maybe Int -> Doc a -> a
-renderANSI n d = go $ prerender n d where
-  go (Attributed s) = foldMap attrRender s
+renderANSI n d = snd $ go $ prerender n d where
+  go (Attributed s) = foldl attrRender (baseFont, "") s
 
 renderPlain :: HasChars a => Maybe Int -> Doc a -> a
 renderPlain n d = go $ prerender n d where
@@ -300,10 +300,11 @@ attrStrip :: HasChars a => Attr a -> a
 attrStrip (Attr _ y) | isNull y = ""
                      | otherwise = y
 
-attrRender :: HasChars a => Attr a -> a
-attrRender a = go a <> renderFont baseFont where
-  go (Attr f y) | isNull y = ""
-                | otherwise = renderFont f <> y
+attrRender :: HasChars a => (Font, a) -> Attr a -> (Font, a)
+attrRender (f, acc) (Attr g y)
+  | isNull y = (f, acc)
+  | f == g = (f, acc <> y)
+  | otherwise = (g, acc <> renderFont g <> y)
 
 prerender :: HasChars a => Maybe Int -> Doc a -> Attributed a
 prerender linelen doc = fromList . reverse . output $
