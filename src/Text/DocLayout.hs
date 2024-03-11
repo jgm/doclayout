@@ -59,6 +59,17 @@ module Text.DocLayout (
      , bold
      , italic
      , underlined
+     , fg
+     , bg
+     , Color
+     , black
+     , red
+     , green
+     , yellow
+     , blue
+     , magenta
+     , cyan
+     , white
      , empty
      -- * Functions for concatenating documents
      , (<+>)
@@ -756,6 +767,43 @@ italic = styled (RShape Italic)
 
 underlined :: HasChars a => Doc a -> Doc a
 underlined = styled (RUnderline ULSingle)
+
+-- The Color type is here as an opaque alias to Color8 for the public interface
+-- and there's trivial smart constructors for the individual colors to
+-- hopefully allow for easier extension to supporting indexed and rgb colors in
+-- the future, without dramatically changing the public API.
+
+type Color = Color8
+
+fg :: HasChars a => Color -> Doc a -> Doc a
+fg = styled . RForeground . FG
+
+bg :: HasChars a => Color -> Doc a -> Doc a
+bg = styled . RBackground . BG
+
+blue :: Color
+blue = Blue
+
+black :: Color
+black = Black
+
+red :: Color
+red = Red
+
+green :: Color
+green = Green
+
+yellow :: Color
+yellow = Yellow
+
+magenta :: Color
+magenta = Magenta
+
+cyan :: Color
+cyan = Cyan
+
+white :: Color
+white = White
 
 -- | Returns width of a character in a monospace font:  0 for a combining
 -- character, 1 for a regular character, 2 for an East Asian wide character.
