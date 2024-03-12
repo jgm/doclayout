@@ -60,19 +60,19 @@ instance HasChars TL.Text where
   build             = B.fromLazyText
 
 instance HasChars a => HasChars (Attr a) where
-  foldrChar f a (Attr _ x) = foldrChar f a x
-  foldlChar f a (Attr _ x) = foldlChar f a x
-  splitLines (Attr f x) = Attr f <$> splitLines x
-  build (Attr _ x) = build x
+  foldrChar f a (Attr _ _ x) = foldrChar f a x
+  foldlChar f a (Attr _ _ x) = foldlChar f a x
+  splitLines (Attr l f x) = Attr l f <$> splitLines x
+  build (Attr _ _ x) = build x
 
 instance (HasChars a) => HasChars (Attributed a) where
   foldrChar _ acc (Attributed S.Empty) = acc
-  foldrChar f acc (Attributed (xs :|> (Attr _ x))) =
+  foldrChar f acc (Attributed (xs :|> (Attr _ _ x))) =
     let l = foldrChar f acc x
         innerFold e a = foldrChar f a e
      in foldr innerFold l xs
   foldlChar _ acc (Attributed S.Empty) = acc
-  foldlChar f acc (Attributed ((Attr _ x) :<| xs)) =
+  foldlChar f acc (Attributed ((Attr _ _ x) :<| xs)) =
     let l = foldlChar f acc x
         innerFold e a = foldlChar f a e
      in foldr innerFold l xs

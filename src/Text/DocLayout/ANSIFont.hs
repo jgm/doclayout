@@ -12,22 +12,25 @@ module Text.DocLayout.ANSIFont
   , Background(..)
   , (~>)
   , renderFont
+  , renderOSC8
   ) where
 
 import Data.Data (Data)
 import Data.String
+import Data.Text (Text)
 
 data Font = Font
   { ftWeight :: Weight,
     ftShape :: Shape,
     ftUnderline :: Underline,
     ftForeground :: Foreground,
-    ftBackground :: Background
+    ftBackground :: Background,
+    ftLink :: Maybe Text
   }
   deriving (Show, Eq, Read, Data, Ord)
 
 baseFont :: Font
-baseFont = Font Normal Roman ULNone FGDefault BGDefault
+baseFont = Font Normal Roman ULNone FGDefault BGDefault Nothing
 
 data Weight = Normal | Bold deriving (Show, Eq, Read, Data, Ord)
 data Shape = Roman | Italic deriving (Show, Eq, Read, Data, Ord)
@@ -84,3 +87,7 @@ renderFont f
         <> renderSGR (ftForeground f)
         <> renderSGR (ftBackground f)
         <> renderSGR (ftUnderline f)
+
+renderOSC8 :: (Semigroup a, IsString a) => Maybe a -> a
+renderOSC8 Nothing = "\ESC]8;;\ESC\\"
+renderOSC8 (Just t) = "\ESC]8;;" <> t <> "\ESC\\"
