@@ -70,6 +70,7 @@ module Text.DocLayout (
      , magenta
      , cyan
      , white
+     , link
      , empty
      -- * Functions for concatenating documents
      , (<+>)
@@ -151,6 +152,7 @@ data Doc a = Text Int a            -- ^ Text with specified width.
          | BlankLines Int          -- ^ Ensure a number of blank lines.
          | Concat (Doc a) (Doc a)  -- ^ Two documents concatenated.
          | Styled StyleReq (Doc a)
+         | Linked Text (Doc a)       -- ^ A hyperlink
          | Empty
          deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
                   Data, Typeable, Generic)
@@ -263,6 +265,7 @@ data RenderState a = RenderState{
        , column     :: Int
        , newlines   :: Int        -- ^ Number of preceding newlines
        , fontStack  :: [Font]
+       , linkTarget :: Maybe Text -- ^ Current link target
        }
 
 peekFont :: RenderState a -> Font
@@ -276,9 +279,9 @@ newline = do
   let rawpref = prefix st'
   when (column st' == 0 && usePrefix st' && not (T.null rawpref)) $ do
      let pref = fromString $ T.unpack $ T.dropWhileEnd isSpace rawpref
-     modify $ \st -> st{ output = Attr baseFont pref : output st
+     modify $ \st -> st{ output = Attr Nothing baseFont pref : output st
                        , column = column st + realLength pref }
-  modify $ \st -> st { output = Attr baseFont "\n" : output st
+  modify $ \st -> st { output = Attr Nothing baseFont "\n" : output st
                      , column = 0
                      , newlines = newlines st + 1
                      }
@@ -289,9 +292,9 @@ outp off s = do           -- offset >= 0 (0 might be combining char)
   let pref = if usePrefix st' then fromString $ T.unpack $ prefix st' else mempty
   let font = peekFont st'
   when (column st' == 0 && not (isNull pref && font == baseFont)) $
-    modify $ \st -> st{ output = Attr baseFont pref : output st
+    modify $ \st -> st{ output = Attr Nothing baseFont pref : output st
                     , column = column st + realLength pref }
-  modify $ \st -> st{ output = Attr font s : output st
+  modify $ \st -> st{ output = Attr (linkTarget st) font s : output st
                     , column = column st + off
                     , newlines = 0 }
 
@@ -302,22 +305,23 @@ render :: HasChars a => Maybe Int -> Doc a -> a
 render = renderPlain
 
 renderANSI :: HasChars a => Maybe Int -> Doc a -> TL.Text
-renderANSI n d = B.toLazyText $ snd $ go $ prerender n d where
-  go (Attributed s) = foldl attrRender (baseFont, B.fromText "") s
+renderANSI n d = B.toLazyText $ (\(_,_,o) -> o) $ go $ prerender n d where
+  go (Attributed s) = foldl attrRender (Nothing, baseFont, B.fromText "") s
 
 renderPlain :: HasChars a => Maybe Int -> Doc a -> a
 renderPlain n d = go $ prerender n d where
   go (Attributed s) = foldMap attrStrip s
 
 attrStrip :: HasChars a => Attr a -> a
-attrStrip (Attr _ y) | isNull y = ""
-                     | otherwise = y
+attrStrip (Attr _ _ y) | isNull y = ""
+                       | otherwise = y
 
-attrRender :: HasChars a => (Font, B.Builder) -> Attr a -> (Font, B.Builder)
-attrRender (f, acc) (Attr g y)
-    | isNull y = (f, acc)
-    | otherwise = (g, acc <> B.fromText newFont <> build y)
+attrRender :: HasChars a => (Link, Font, B.Builder) -> Attr a -> (Link, Font, B.Builder)
+attrRender (l, f, acc) (Attr m g y)
+    | isNull y = (l, f, acc)
+    | otherwise = (m, g, acc <> B.fromText newFont <> B.fromText newLink <> build y)
   where
+    newLink = if l == m then mempty else renderOSC8 m
     newFont = if f == g then mempty else renderFont g
 
 prerender :: HasChars a => Maybe Int -> Doc a -> Attributed a
@@ -330,7 +334,8 @@ prerender linelen doc = fromList . reverse . output $
                           , lineLength = linelen
                           , column = 0
                           , newlines = 2
-                          , fontStack = [] }
+                          , fontStack = []
+                          , linkTarget = Nothing }
 
 renderDoc :: HasChars a => Doc a -> DocState a
 renderDoc = renderList . normalize . unfoldD
@@ -393,7 +398,7 @@ renderList (CookedText off s : xs) = do
   let pref = if usePrefix st' then fromString $ T.unpack $ prefix st' else mempty
   let elems (Attributed x) = reverse $ toList x
   when (column st' == 0 && not (isNull pref))  $
-    modify $ \st -> st{ output = Attr baseFont pref : output st
+    modify $ \st -> st{ output = Attr Nothing baseFont pref : output st
                       , column = column st + realLength pref }
   modify $ \st -> st{ output = elems s ++ output st
                     , column = column st + off
@@ -407,6 +412,18 @@ renderList (Styled style doc : xs) = do
   modify $ \s -> s{fontStack = nextFont : fontStack s}
   renderDoc doc
   modify $ \s -> s{ fontStack = fontStack st, output = output s }
+  renderList xs
+
+-- Nested links are nonsensical, we only handle the outermost and
+-- silently ignore any attempts to have a link inside a link
+renderList (Linked target doc : xs) = do
+  st <- get
+  case linkTarget st of
+    Nothing -> do
+      modify $ \s -> s{linkTarget = Just target}
+      renderDoc doc
+      modify $ \s -> s{linkTarget = Nothing}
+    _ -> renderDoc doc
   renderList xs
 
 renderList (Prefixed pref d : xs) = do
@@ -477,7 +494,7 @@ renderList (b : xs) | isBlock b = do
       heightOf _            = 1
   let maxheight = maximum $ map heightOf (b:bs)
   let toBlockSpec (Block w ls) = (w, ls)
-      toBlockSpec (VFill w t)  = (w, map (singleton . (Attr font)) (take maxheight $ repeat t))
+      toBlockSpec (VFill w t)  = (w, map (singleton . (Attr (linkTarget st) font)) (take maxheight $ repeat t))
       toBlockSpec _            = (0, [])
   let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
                              (map toBlockSpec bs)
@@ -522,6 +539,7 @@ startsBlank (BlankLines _)     = True
 startsBlank (Concat Empty y)   = startsBlank y
 startsBlank (Concat x _)       = startsBlank x
 startsBlank (Styled _ x)       = startsBlank x
+startsBlank (Linked _ x)       = startsBlank x
 startsBlank Empty              = True
 
 isBlock :: Doc a -> Bool
@@ -639,6 +657,7 @@ getOffset breakWhen (!l, !c) x =
     CookedText n _ -> (l, c + n)
     Empty -> (l, c)
     Styled _ d -> getOffset breakWhen (l, c) d
+    Linked _ d -> getOffset breakWhen (l, c) d
     CarriageReturn -> (max l c, 0)
     NewLine -> (max l c, 0)
     BlankLines _ -> (max l c, 0)
@@ -804,6 +823,9 @@ cyan = Cyan
 
 white :: Color
 white = White
+
+link :: HasChars a => Text -> Doc a -> Doc a
+link = Linked
 
 -- | Returns width of a character in a monospace font:  0 for a combining
 -- character, 1 for a regular character, 2 for an East Asian wide character.
