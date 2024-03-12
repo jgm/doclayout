@@ -59,6 +59,7 @@ module Text.DocLayout (
      , bold
      , italic
      , underlined
+     , strikeout
      , fg
      , bg
      , Color
@@ -786,6 +787,9 @@ italic = styled (RShape Italic)
 
 underlined :: HasChars a => Doc a -> Doc a
 underlined = styled (RUnderline ULSingle)
+
+strikeout :: HasChars a => Doc a -> Doc a
+strikeout = styled (RStrikeout Struck)
 
 -- The Color type is here as an opaque alias to Color8 for the public interface
 -- and there's trivial smart constructors for the individual colors to

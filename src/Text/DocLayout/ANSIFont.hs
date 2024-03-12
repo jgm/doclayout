@@ -8,6 +8,7 @@ module Text.DocLayout.ANSIFont
   , Shape(..)
   , Color8(..)
   , Underline(..)
+  , Strikeout(..)
   , Foreground(..)
   , Background(..)
   , (~>)
@@ -23,6 +24,7 @@ data Font = Font
   { ftWeight :: Weight,
     ftShape :: Shape,
     ftUnderline :: Underline,
+    ftStrikeout :: Strikeout,
     ftForeground :: Foreground,
     ftBackground :: Background,
     ftLink :: Maybe Text
@@ -30,17 +32,23 @@ data Font = Font
   deriving (Show, Eq, Read, Data, Ord)
 
 baseFont :: Font
-baseFont = Font Normal Roman ULNone FGDefault BGDefault Nothing
+baseFont = Font Normal Roman ULNone Unstruck FGDefault BGDefault Nothing
 
 data Weight = Normal | Bold deriving (Show, Eq, Read, Data, Ord)
 data Shape = Roman | Italic deriving (Show, Eq, Read, Data, Ord)
 data Color8 = Black | Red | Green | Yellow | Blue | Magenta | Cyan | White deriving (Show, Eq, Enum, Read, Data, Ord)
 data Underline = ULNone | ULSingle | ULDouble | ULCurly deriving (Show, Eq, Read, Data, Ord)
+data Strikeout = Unstruck | Struck deriving (Show, Eq, Read, Data, Ord)
 data Foreground = FGDefault | FG Color8 deriving (Show, Eq, Read, Data, Ord)
 data Background = BGDefault | BG Color8 deriving (Show, Eq, Read, Data, Ord)
 
-data StyleReq =
-  RWeight Weight | RShape Shape | RForeground Foreground | RBackground Background | RUnderline Underline
+data StyleReq
+  = RWeight Weight
+  | RShape Shape
+  | RForeground Foreground
+  | RBackground Background
+  | RUnderline Underline
+  | RStrikeout Strikeout
   deriving (Show, Eq, Read, Data, Ord)
 
 (~>) :: Font -> StyleReq -> Font
@@ -49,6 +57,7 @@ data StyleReq =
 (~>) f (RForeground c) = f{ftForeground = c}
 (~>) f (RBackground c) = f{ftBackground = c}
 (~>) f (RUnderline u) = f{ftUnderline = u}
+(~>) f (RStrikeout u) = f{ftStrikeout = u}
 
 rawSGR :: (Semigroup a, IsString a) => a -> a
 rawSGR n = "\ESC[" <> n <> "m"
@@ -78,6 +87,10 @@ instance SGR Underline where
   renderSGR ULDouble = rawSGR "21"
   renderSGR ULCurly = rawSGR "4:3"
 
+instance SGR Strikeout where
+  renderSGR Unstruck = rawSGR "29"
+  renderSGR Struck = rawSGR "9"
+
 renderFont :: (Semigroup a, IsString a) => Font -> a
 renderFont f
   | f == baseFont = rawSGR "0"
@@ -87,6 +100,7 @@ renderFont f
         <> renderSGR (ftForeground f)
         <> renderSGR (ftBackground f)
         <> renderSGR (ftUnderline f)
+        <> renderSGR (ftStrikeout f)
 
 renderOSC8 :: (Semigroup a, IsString a) => Maybe a -> a
 renderOSC8 Nothing = "\ESC]8;;\ESC\\"
