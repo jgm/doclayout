@@ -33,6 +33,7 @@ class (IsString a, Semigroup a, Monoid a, Show a) => HasChars a where
     go '\n' (cur,lns) = ([], fromString cur : lns)
     go c    (cur,lns) = (c:cur, lns)
   build         :: a -> B.Builder
+  build = foldrChar (mappend . B.singleton) (B.fromString "")
 
 instance HasChars Text where
   foldrChar         = T.foldr
