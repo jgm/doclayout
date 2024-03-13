@@ -109,6 +109,8 @@ import Data.Foldable (toList)
 import Data.String
 import qualified Data.Text as T
 import Data.Text (Text)
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Builder as B
 import Text.DocLayout.HasChars
 import Text.DocLayout.ANSIFont
 import Text.DocLayout.Attributed
@@ -288,9 +290,9 @@ outp off s = do           -- offset >= 0 (0 might be combining char)
 render :: HasChars a => Maybe Int -> Doc a -> a
 render = renderPlain
 
-renderANSI :: HasChars a => Maybe Int -> Doc a -> a
-renderANSI n d = snd $ go $ prerender n d where
-  go (Attributed s) = foldl attrRender (baseFont, "") s
+renderANSI :: HasChars a => Maybe Int -> Doc a -> TL.Text
+renderANSI n d = B.toLazyText $ snd $ go $ prerender n d where
+  go (Attributed s) = foldl attrRender (baseFont, B.fromText "") s
 
 renderPlain :: HasChars a => Maybe Int -> Doc a -> a
 renderPlain n d = go $ prerender n d where
@@ -300,11 +302,12 @@ attrStrip :: HasChars a => Attr a -> a
 attrStrip (Attr _ y) | isNull y = ""
                      | otherwise = y
 
-attrRender :: HasChars a => (Font, a) -> Attr a -> (Font, a)
+attrRender :: HasChars a => (Font, B.Builder) -> Attr a -> (Font, B.Builder)
 attrRender (f, acc) (Attr g y)
-  | isNull y = (f, acc)
-  | f == g = (f, acc <> y)
-  | otherwise = (g, acc <> renderFont g <> y)
+    | isNull y = (f, acc)
+    | otherwise = (g, acc <> B.fromText newFont <> build y)
+  where
+    newFont = if f == g then mempty else renderFont g
 
 prerender :: HasChars a => Maybe Int -> Doc a -> Attributed a
 prerender linelen doc = fromList . reverse . output $
