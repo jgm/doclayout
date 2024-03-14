@@ -8,6 +8,7 @@ import Data.String
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Text (Text)
+import qualified Data.Text.Lazy.Builder as B
 import Data.List (foldl', uncons)
 import Data.Maybe (fromMaybe)
 import Text.DocLayout.Attributed
@@ -31,6 +32,8 @@ class (IsString a, Semigroup a, Monoid a, Show a) => HasChars a where
     (firstline, otherlines) = foldrChar go ([],[]) s
     go '\n' (cur,lns) = ([], fromString cur : lns)
     go c    (cur,lns) = (c:cur, lns)
+  build         :: a -> B.Builder
+  build = foldrChar (mappend . B.singleton) (B.fromString "")
 
 instance HasChars Text where
   foldrChar         = T.foldr
@@ -38,6 +41,7 @@ instance HasChars Text where
   splitLines        = T.splitOn "\n"
   replicateChar n c = T.replicate n (T.singleton c)
   isNull            = T.null
+  build             = B.fromText
 
 instance HasChars String where
   foldrChar     = foldr
@@ -45,6 +49,7 @@ instance HasChars String where
   splitLines    = lines . (++"\n")
   replicateChar = replicate
   isNull        = null
+  build         = B.fromString
 
 instance HasChars TL.Text where
   foldrChar         = TL.foldr
@@ -52,11 +57,13 @@ instance HasChars TL.Text where
   splitLines        = TL.splitOn "\n"
   replicateChar n c = TL.replicate (fromIntegral n) (TL.singleton c)
   isNull            = TL.null
+  build             = B.fromLazyText
 
 instance HasChars a => HasChars (Attr a) where
   foldrChar f a (Attr _ x) = foldrChar f a x
   foldlChar f a (Attr _ x) = foldlChar f a x
   splitLines (Attr f x) = Attr f <$> splitLines x
+  build (Attr _ x) = build x
 
 instance (HasChars a) => HasChars (Attributed a) where
   foldrChar _ acc (Attributed S.Empty) = acc
@@ -79,3 +86,4 @@ instance (HasChars a) => HasChars (Attributed a) where
           k1 : ks ->
             let (end, most) = fromMaybe (S.empty, []) $ uncons $ reverse $ S.singleton <$> ks
              in go (most ++ (cur |> k1) : lns, end) xs
+  build = foldMap build
