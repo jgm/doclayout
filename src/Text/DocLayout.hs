@@ -114,6 +114,8 @@ import GHC.Generics
 import Data.Bifunctor (second)
 import Data.Char (isSpace, ord)
 import Data.List (foldl', intersperse)
+import Data.List.NonEmpty (NonEmpty((:|)))
+import qualified Data.List.NonEmpty as N
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as M
 import qualified Data.Map.Internal as MInt
@@ -256,6 +258,62 @@ chomp d =
           z     -> x <> z
     _                         -> d
 
+-- Elements of a document with Styled and Linked subtrees flattened out into
+-- a linear structure with open and close tags. An implementation detail of
+-- the rendering process.
+data FlatDoc a = FText Int a
+               | FBlock Int [Attributed a]
+               | FVFill Int a
+               | FCookedText Int (Attributed a)
+               | FPrefixed Text (NonEmpty (FlatDoc a))
+               | FBeforeNonBlank (NonEmpty (FlatDoc a))
+               | FFlush (NonEmpty (FlatDoc a))
+               | FBreakingSpace
+               | FAfterBreak (NonEmpty (FlatDoc a))
+               | FCarriageReturn
+               | FNewLine
+               | FBlankLines Int
+               | FStyleOpen StyleReq
+               | FStyleClose
+               | FLinkOpen Text
+               | FLinkClose
+         deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
+                  Data, Typeable, Generic)
+
+-- Given a Doc, return an equivalent list of FlatDocs, to be processed by
+-- renderList. Worth noting:
+--   * Treelike docs (Styled, and Linked) are turned into lists beginning
+--     with an "open" tag and ending with a "close" tag, with the flattened
+--     inner content in between.
+--   * Other Docs with inner content are eliminated if the inner content is
+--     empty, otherwise the inner content is itself flattened and made into
+--     a NonEmpty.
+flatten :: HasChars a => Doc a -> [FlatDoc a]
+flatten (Text n a) = [FText n a]
+flatten (Block n a) = [FBlock n a]
+flatten (VFill n a) = [FVFill n a]
+flatten (CookedText n a) = [FCookedText n a]
+flatten (Prefixed p d) | null f = []
+                       | otherwise = [FPrefixed p (N.fromList f)]
+                       where f = (normalize . flatten) d
+flatten (BeforeNonBlank d) | null f = []
+                           | otherwise = [FBeforeNonBlank (N.fromList f)]
+                           where f = flatten d
+flatten (Flush d) | null f = []
+                  | otherwise = [FFlush (N.fromList f)]
+                  where f = flatten d
+flatten BreakingSpace = [FBreakingSpace]
+flatten CarriageReturn = [FCarriageReturn]
+flatten (AfterBreak t) | null f = []
+                       | otherwise = [FAfterBreak (N.fromList f)]
+                       where f = flatten $ fromString $ T.unpack t
+flatten NewLine = [FNewLine]
+flatten (BlankLines n) = [FBlankLines n]
+flatten Empty = []
+flatten (Concat x y) = flatten x <> flatten y
+flatten (Linked l x) = FLinkOpen l : flatten x <> [FLinkClose]
+flatten (Styled f x) = FStyleOpen f : flatten x <> [FStyleClose]
+
 type DocState a = State (RenderState a) ()
 
 data RenderState a = RenderState{
@@ -306,8 +364,9 @@ render :: HasChars a => Maybe Int -> Doc a -> a
 render = renderPlain
 
 renderANSI :: HasChars a => Maybe Int -> Doc a -> TL.Text
-renderANSI n d = B.toLazyText $ (\(_,_,o) -> o) $ go $ prerender n d where
-  go (Attributed s) = foldl attrRender (Nothing, baseFont, B.fromText "") s
+renderANSI n d = B.toLazyText $ go $ prerender n d where
+  go s = (\(_,_,o) -> o) (go' s) <> B.fromText (renderFont baseFont) <> B.fromText (renderOSC8 Nothing)
+  go' (Attributed s) = foldl attrRender (Nothing, baseFont, B.fromText "") s
 
 renderPlain :: HasChars a => Maybe Int -> Doc a -> a
 renderPlain n d = go $ prerender n d where
@@ -339,35 +398,33 @@ prerender linelen doc = fromList . reverse . output $
                           , linkTarget = Nothing }
 
 renderDoc :: HasChars a => Doc a -> DocState a
-renderDoc = renderList . normalize . unfoldD
+renderDoc = renderList . normalize . flatten
 
 
-normalize :: HasChars a => [Doc a] -> [Doc a]
+normalize :: HasChars a => [FlatDoc a] -> [FlatDoc a]
 normalize [] = []
-normalize (Concat{} : xs) = normalize xs -- should not happen after unfoldD
-normalize (Empty : xs) = normalize xs -- should not happen after unfoldD
-normalize [NewLine] = normalize [CarriageReturn]
-normalize [BlankLines _] = normalize [CarriageReturn]
-normalize [BreakingSpace] = []
-normalize (BlankLines m : BlankLines n : xs) =
-  normalize (BlankLines (max m n) : xs)
-normalize (BlankLines num : BreakingSpace : xs) =
-  normalize (BlankLines num : xs)
-normalize (BlankLines m : CarriageReturn : xs) = normalize (BlankLines m : xs)
-normalize (BlankLines m : NewLine : xs) = normalize (BlankLines m : xs)
-normalize (NewLine : BlankLines m : xs) = normalize (BlankLines m : xs)
-normalize (NewLine : BreakingSpace : xs) = normalize (NewLine : xs)
-normalize (NewLine : CarriageReturn : xs) = normalize (NewLine : xs)
-normalize (CarriageReturn : CarriageReturn : xs) =
-  normalize (CarriageReturn : xs)
-normalize (CarriageReturn : BlankLines m : xs) = normalize (BlankLines m : xs)
-normalize (CarriageReturn : BreakingSpace : xs) =
-  normalize (CarriageReturn : xs)
-normalize (BreakingSpace : CarriageReturn : xs) =
-  normalize (CarriageReturn:xs)
-normalize (BreakingSpace : NewLine : xs) = normalize (NewLine:xs)
-normalize (BreakingSpace : BlankLines n : xs) = normalize (BlankLines n:xs)
-normalize (BreakingSpace : BreakingSpace : xs) = normalize (BreakingSpace:xs)
+normalize [FNewLine] = normalize [FCarriageReturn]
+normalize [FBlankLines _] = normalize [FCarriageReturn]
+normalize [FBreakingSpace] = []
+normalize (FBlankLines m : FBlankLines n : xs) =
+  normalize (FBlankLines (max m n) : xs)
+normalize (FBlankLines num : FBreakingSpace : xs) =
+  normalize (FBlankLines num : xs)
+normalize (FBlankLines m : FCarriageReturn : xs) = normalize (FBlankLines m : xs)
+normalize (FBlankLines m : FNewLine : xs) = normalize (FBlankLines m : xs)
+normalize (FNewLine : FBlankLines m : xs) = normalize (FBlankLines m : xs)
+normalize (FNewLine : FBreakingSpace : xs) = normalize (FNewLine : xs)
+normalize (FNewLine : FCarriageReturn : xs) = normalize (FNewLine : xs)
+normalize (FCarriageReturn : FCarriageReturn : xs) =
+  normalize (FCarriageReturn : xs)
+normalize (FCarriageReturn : FBlankLines m : xs) = normalize (FBlankLines m : xs)
+normalize (FCarriageReturn : FBreakingSpace : xs) =
+  normalize (FCarriageReturn : xs)
+normalize (FBreakingSpace : FCarriageReturn : xs) =
+  normalize (FCarriageReturn:xs)
+normalize (FBreakingSpace : FNewLine : xs) = normalize (FNewLine:xs)
+normalize (FBreakingSpace : FBlankLines n : xs) = normalize (FBlankLines n:xs)
+normalize (FBreakingSpace : FBreakingSpace : xs) = normalize (FBreakingSpace:xs)
 normalize (x:xs) = x : normalize xs
 
 mergeBlocks :: HasChars a => Int -> (Int, [a]) -> (Int, [a]) -> (Int, [a])
@@ -385,16 +442,14 @@ mergeBlocks h (w1,lns1) (w2,lns2) =
              else take h lns2
   pad n s = s <> replicateChar (n - realLength s) ' '
 
-renderList :: HasChars a => [Doc a] -> DocState a
+renderList :: HasChars a => [FlatDoc a] -> DocState a
 renderList [] = return ()
 
-renderList (Empty : xs) = renderList xs
-
-renderList (Text off s : xs) = do
+renderList (FText off s : xs) = do
   outp off s
   renderList xs
 
-renderList (CookedText off s : xs) = do
+renderList (FCookedText off s : xs) = do
   st' <- get
   let pref = if usePrefix st' then fromString $ T.unpack $ prefix st' else mempty
   let elems (Attributed x) = reverse $ toList x
@@ -406,57 +461,74 @@ renderList (CookedText off s : xs) = do
                     , newlines = 0 }
   renderList xs
 
-renderList (Styled style doc : xs) = do
+-- FStyleOpen and FStyleClose are balanced by construction when we create
+-- them in `flatten`, so we can just pop the stack when we encounter
+-- FStyleClose
+renderList (FStyleOpen style : xs) = do
   st <- get
   let prevFont = peekFont st
   let nextFont = prevFont ~> style
   modify $ \s -> s{fontStack = nextFont : fontStack s}
-  renderDoc doc
-  modify $ \s -> s{ fontStack = fontStack st, output = output s }
+  renderList xs
+
+renderList (FStyleClose : xs) = do
+  modify $ \s -> s{fontStack = drop 1 $ fontStack s}
   renderList xs
 
 -- Nested links are nonsensical, we only handle the outermost and
 -- silently ignore any attempts to have a link inside a link
-renderList (Linked target doc : xs) = do
+
+-- Nested links are nonsensical, we only handle the outermost and
+-- silently ignore any attempts to have a link inside a link
+renderList (FLinkOpen target : xs) = do
   st <- get
   case linkTarget st of
     Nothing -> do
       modify $ \s -> s{linkTarget = Just target}
-      renderDoc doc
-      modify $ \s -> s{linkTarget = Nothing}
-    _ -> renderDoc doc
+      renderList xs
+    _ -> do
+      let (next, rest) = break isLinkClose xs
+      renderList (next <> drop 1 rest)
+  where
+    isLinkClose FLinkClose = True
+    isLinkClose _ = False
+
+renderList (FLinkClose : xs) = do
+  modify $ \s -> s{linkTarget = Nothing}
   renderList xs
 
-renderList (Prefixed pref d : xs) = do
+renderList (FPrefixed pref d : xs) = do
   st <- get
   let oldPref = prefix st
   put st{ prefix = prefix st <> pref }
-  renderDoc d
+  renderList $ normalize $ N.toList d
   modify $ \s -> s{ prefix = oldPref }
   -- renderDoc CarriageReturn
   renderList xs
 
-renderList (Flush d : xs) = do
+renderList (FFlush d : xs) = do
   st <- get
   let oldUsePrefix = usePrefix st
   put st{ usePrefix = False }
-  renderDoc d
+  renderList $ normalize $ N.toList d
   modify $ \s -> s{ usePrefix = oldUsePrefix }
   renderList xs
 
-renderList (BeforeNonBlank d : xs) =
-  case xs of
+renderList (FBeforeNonBlank d : xs) = do
+  let next = dropWhile (not . isPrintable) xs
+  case next of
     (x:_) | startsBlank x -> renderList xs
-          | otherwise     -> renderDoc d >> renderList xs
+          | otherwise     -> renderList (normalize $ N.toList d) >> renderList xs
     []                    -> renderList xs
-renderList (BlankLines num : xs) = do
+
+renderList (FBlankLines num : xs) = do
   st <- get
   case output st of
      _ | newlines st > num -> return ()
        | otherwise -> replicateM_ (1 + num - newlines st) newline
   renderList xs
 
-renderList (CarriageReturn : xs) = do
+renderList (FCarriageReturn : xs) = do
   st <- get
   if newlines st > 0
      then renderList xs
@@ -464,12 +536,12 @@ renderList (CarriageReturn : xs) = do
        newline
        renderList xs
 
-renderList (NewLine : xs) = do
+renderList (FNewLine : xs) = do
   newline
   renderList xs
 
-renderList (BreakingSpace : xs) = do
-  let isBreakingSpace BreakingSpace = True
+renderList (FBreakingSpace : xs) = do
+  let isBreakingSpace FBreakingSpace = True
       isBreakingSpace _ = False
   let xs' = dropWhile isBreakingSpace xs
   let next = takeWhile (not . isBreakable) xs'
@@ -480,22 +552,23 @@ renderList (BreakingSpace : xs) = do
         _  -> when (column st > 0) $ outp 1 " "
   renderList xs'
 
-renderList (AfterBreak t : xs) = do
+renderList (FAfterBreak t : xs) = do
   st <- get
   if newlines st > 0
-     then renderList (fromString (T.unpack t) : xs)
+     then renderList (toList t <> xs)
      else renderList xs
 
-renderList (b : xs) | isBlock b = do
+-- FBlock and FVFill are all that's left
+renderList (b : xs) = do
   st <- get
   let font = peekFont st
   let (bs, rest) = span isBlock xs
   -- ensure we have right padding unless end of line
-  let heightOf (Block _ ls) = length ls
+  let heightOf (FBlock _ ls) = length ls
       heightOf _            = 1
   let maxheight = maximum $ map heightOf (b:bs)
-  let toBlockSpec (Block w ls) = (w, ls)
-      toBlockSpec (VFill w t)  = (w, map (singleton . (Attr (linkTarget st) font)) (take maxheight $ repeat t))
+  let toBlockSpec (FBlock w ls) = (w, ls)
+      toBlockSpec (FVFill w t)  = (w, map (singleton . (Attr (linkTarget st) font)) (take maxheight $ repeat t))
       toBlockSpec _            = (0, [])
   let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
                              (map toBlockSpec bs)
@@ -503,19 +576,15 @@ renderList (b : xs) | isBlock b = do
   case column st - realLength oldPref of
         n | n > 0 -> modify $ \s -> s{ prefix = oldPref <> T.replicate n " " }
         _ -> return ()
-  renderList $ intersperse CarriageReturn (map cook lns')
+  renderList $ intersperse FCarriageReturn (mapMaybe cook lns')
   modify $ \s -> s{ prefix = oldPref }
   renderList rest
 
-renderList (x:_) = error $ "renderList encountered " ++ show x
-
-isBreakable :: HasChars a => Doc a -> Bool
-isBreakable BreakingSpace      = True
-isBreakable CarriageReturn     = True
-isBreakable NewLine            = True
-isBreakable (BlankLines _)     = True
-isBreakable (Concat Empty y)   = isBreakable y
-isBreakable (Concat x _)       = isBreakable x
+isBreakable :: HasChars a => FlatDoc a -> Bool
+isBreakable FBreakingSpace      = True
+isBreakable FCarriageReturn     = True
+isBreakable FNewLine            = True
+isBreakable (FBlankLines _)     = True
 isBreakable _                  = False
 
 startsBlank' :: HasChars a => a -> Bool
@@ -524,36 +593,42 @@ startsBlank' t = fromMaybe False $ foldlChar go Nothing t
    go Nothing  c = Just (isSpace c)
    go (Just b) _ = Just b
 
-startsBlank :: HasChars a => Doc a -> Bool
-startsBlank (Text _ t)         = startsBlank' t
-startsBlank (CookedText _ t)   = startsBlank' t
-startsBlank (Block n ls)       = n > 0 && all startsBlank' ls
-startsBlank (VFill n t)        = n > 0 && startsBlank' t
-startsBlank (BeforeNonBlank x) = startsBlank x
-startsBlank (Prefixed _ x)     = startsBlank x
-startsBlank (Flush x)          = startsBlank x
-startsBlank BreakingSpace      = True
-startsBlank (AfterBreak t)     = startsBlank (Text 0 t)
-startsBlank CarriageReturn     = True
-startsBlank NewLine            = True
-startsBlank (BlankLines _)     = True
-startsBlank (Concat Empty y)   = startsBlank y
-startsBlank (Concat x _)       = startsBlank x
-startsBlank (Styled _ x)       = startsBlank x
-startsBlank (Linked _ x)       = startsBlank x
-startsBlank Empty              = True
+startsBlank :: HasChars a => FlatDoc a -> Bool
+startsBlank (FText _ t)                = startsBlank' t
+startsBlank (FCookedText _ t)          = startsBlank' t
+startsBlank (FBlock n ls)              = n > 0 && all startsBlank' ls
+startsBlank (FVFill n t)               = n > 0 && startsBlank' t
+startsBlank (FBeforeNonBlank (x :| _)) = startsBlank x
+startsBlank (FPrefixed _ (x :| _))     = startsBlank x
+startsBlank (FFlush (x :| _))          = startsBlank x
+startsBlank FBreakingSpace             = True
+startsBlank (FAfterBreak (t :| _))     = startsBlank t
+startsBlank FCarriageReturn            = True
+startsBlank FNewLine                   = True
+startsBlank (FBlankLines _)            = True
+startsBlank (FStyleOpen _)             = True
+startsBlank (FLinkOpen _)              = True
+startsBlank FStyleClose                = True
+startsBlank FLinkClose                 = True
 
-isBlock :: Doc a -> Bool
-isBlock Block{} = True
-isBlock VFill{} = True
+isPrintable :: FlatDoc a -> Bool
+isPrintable FLinkOpen{} = False
+isPrintable FLinkClose{} = False
+isPrintable FStyleOpen{} = False
+isPrintable FStyleClose{} = False
+isPrintable _ = True
+
+isBlock :: FlatDoc a -> Bool
+isBlock FBlock{} = True
+isBlock FVFill{} = True
 isBlock _       = False
 
-offsetOf :: Doc a -> Int
-offsetOf (Text o _)       = o
-offsetOf (Block w _)      = w
-offsetOf (VFill w _)      = w
-offsetOf (CookedText w _) = w
-offsetOf BreakingSpace    = 1
+offsetOf :: FlatDoc a -> Int
+offsetOf (FText o _)       = o
+offsetOf (FBlock w _)      = w
+offsetOf (FVFill w _)      = w
+offsetOf (FCookedText w _) = w
+offsetOf FBreakingSpace    = 1
 offsetOf _                = 0
 
 -- | Create a 'Doc' from a stringlike value.
@@ -568,9 +643,9 @@ literal x =
         splitLines x
 {-# NOINLINE literal #-}
 
-cook :: HasChars a => Attributed a -> Doc a
-cook x | isNull x = Empty
-       | otherwise = let !len = realLength x in CookedText len x
+cook :: HasChars a => Attributed a -> Maybe (FlatDoc a)
+cook x | isNull x = Nothing
+       | otherwise = let !len = realLength x in Just (FCookedText len x)
 
 -- | A literal string.  (Like 'literal', but restricted to String.)
 text :: HasChars a => String -> Doc a
