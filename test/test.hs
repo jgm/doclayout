@@ -287,6 +287,11 @@ tests =
       (literal "a" <> cr <> literal "\nb" <> cr <> literal "c")
       "a\n\nb\nc"
 
+  , renderTest "breaking within styled text"
+      (Just 5)
+      ("hi" <+> (fg blue ("mom" <+> "and" <+> "dad")))
+      "hi\nmom\nand\ndad"
+
   , testCase "length of normal text" $
       realLength ("This is going to be too long anyway" :: String) @?= 35
 
