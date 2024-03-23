@@ -173,6 +173,7 @@ instance Monoid (Doc a) where
 instance HasChars a => IsString (Doc a) where
   fromString = text
 
+{-# DEPRECATED unfoldD "unfoldD will be removed from the API." #-}
 -- | Unfold a 'Doc' into a flat list.
 unfoldD :: Doc a -> [Doc a]
 unfoldD Empty = []
