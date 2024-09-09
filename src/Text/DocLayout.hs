@@ -102,7 +102,7 @@ module Text.DocLayout (
      -- * Types
      , Doc(..)
      , HasChars(..)
-     , Attributed(..)
+     , Attributed
      )
 
 where
