@@ -1,5 +1,72 @@
 # doclayout
 
+## 0.5
+
+  * Extract existing HasChars definition into a module
+    Text.DocLayout.HasChars (Evan Silberman) [API change].
+
+  * Add a `build` method to the signature of HasChars
+    (Evan Silberman). This has a default definition, and is only needed with
+    the ANSI renderer, so existing users should not need to add anything to
+    their HasChars instances.
+
+  * Introduce support for ANSI-styled output (Evan Silberman) [API change].
+    `renderPlain` and `renderANSI` are now exported; the old `render`
+    is a synonym of `renderPlain`.  In addition, various functions are
+    exported to add ANSI formatting (including bold, italics,
+    underline, strikeout, links, and colors) to a Doc.
+
+    The new Text.DocLayout.ANSIFont module introduces ADTs for various
+    text properties that are supported by terminals, and for Fonts that
+    indicate all the properties that should apply to a particular span of text.
+    New fonts can be constructed by applying a StyleReq to an existing font,
+    which replaces the requested property in the original font with the
+    requested value.
+
+    The new Text.DocLayout.Attributed model introduces Attributed strings,
+    which carry a Font along with an inner string type. It instantiates the
+    HasChars class so that various features of the existing DocLayout code can
+    somewhat seamlessly support rendering styled text.
+
+    Implementation outline:
+
+    1. Consumers add a smart constructor like `bold` to style a Doc. The
+       inner doc gets wrapped in Doc's `Styled` constructor, indicating the
+       text style requested for that block.
+    2. The renderer maintains a stack of `Font`s. When a `Styled` element is
+       encountered, its `StyleReq` is applied to the `Font` on the top of
+       the stack and pushed, the inner document is rendered, and then the
+       font is popped and rendering continues.
+    3. The `Attributed a` returned by `prerender` can be rendered to `a`
+       using `renderPlain`, which ignores all the font requests, or
+       `renderANSI`, which adds the requisite control sequences to set the
+       font every time the font changes.
+
+    The most interesting wrinkle to this implementation is that the contents
+    of `Block` elements need to be prerendered by the `block` helper so they
+    can be broken up into lines and filled, but we want to defer the
+    decision of rendering plain text or ANSI-styled text until the final
+    document is rendered. To support this, the `Block` constructor for a
+    `Doc a` now carries an `Attributed a` in its lines field. Once the next
+    rendering pass merges blocks together, instead of using `literal` to
+    construct `Text` elements carring an `a` to render, it uses `cook` to
+    construct `Cooked` elements with an `Attributed a` to be copied directly
+    to the output stream _without looking at the font stack_. This means
+    that the contents of a block are only ever styled by style requests that
+    were made in the inner document of the block: the contents of `bold $
+    cblock n $ literal "x"` will be printed in plain text, whereas the
+    contents of `cblock n $ bold $ literal "x"` will be bold.
+
+  * Introduce FlatDocs and use them for rendering (Evan Silberman).
+    This is an internal concept, not part of the public API.
+    FlatDoc is an "intermediate representation" for the Doc "interpreter".
+    The general design is that any Doc can be turned into a list of FlatDocs
+    that carry equivalent information. The main point of doing this
+    is to replace the nested Styled and Linked Docs, which form a more
+    complicated tree structure than previously existed in DocLayout.
+
+  * Deprecate `unfoldD`.
+
 ## 0.4.0.1
 
   * Add clause for Empty to renderList (#22).
