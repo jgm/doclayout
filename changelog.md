@@ -15,7 +15,7 @@
     is a synonym of `renderPlain`.  In addition, various functions are
     exported to add ANSI formatting (including bold, italics,
     underline, strikeout, links, and colors) to a Doc. The Attributed
-    type constructor is also now exported.
+    type is also now exported.
 
   * Change type of Block constructor, replacing `[a]` with `[Attributed a]`,
     which carries a Font along with an inner string type [API change]
