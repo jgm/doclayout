@@ -15,6 +15,7 @@ import Data.Text (Text)
 
 type Link = Maybe Text
 
+-- | Font attributes.
 data Attr a = Attr Link Font a
   deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
     Data, Typeable, Generic)
@@ -25,6 +26,7 @@ instance Semigroup a => Semigroup (Attr a) where
 instance (IsString a, Monoid a) => Monoid (Attr a) where
   mempty = Attr Nothing baseFont (fromString "")
 
+-- | A sequence of strings with font attributes.
 newtype Attributed a = Attributed (S.Seq (Attr a))
   deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
          Data, Typeable, Generic)

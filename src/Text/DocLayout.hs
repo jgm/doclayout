@@ -359,17 +359,21 @@ outp off s = do           -- offset >= 0 (0 might be combining char)
                     , column = column st + off
                     , newlines = 0 }
 
--- | Render a 'Doc'.  @render (Just n)@ will use
--- a line length of @n@ to reflow text on breakable spaces.
--- @render Nothing@ will not reflow text.
+-- | Synonym for 'renderPlain'.
 render :: HasChars a => Maybe Int -> Doc a -> a
 render = renderPlain
 
+-- | Render a 'Doc' with ANSI escapes.  @renderANSI (Just n)@ will use
+-- a line length of @n@ to reflow text on breakable spaces.
+-- @renderANSI Nothing@ will not reflow text.
 renderANSI :: HasChars a => Maybe Int -> Doc a -> TL.Text
 renderANSI n d = B.toLazyText $ go $ prerender n d where
   go s = (\(_,_,o) -> o) (go' s) <> B.fromText (renderFont baseFont) <> B.fromText (renderOSC8 Nothing)
   go' (Attributed s) = foldl attrRender (Nothing, baseFont, B.fromText "") s
 
+-- | Render a 'Doc' without using ANSI escapes.  @renderPlain (Just n)@ will use
+-- a line length of @n@ to reflow text on breakable spaces.
+-- @renderPlain Nothing@ will not reflow text.
 renderPlain :: HasChars a => Maybe Int -> Doc a -> a
 renderPlain n d = go $ prerender n d where
   go (Attributed s) = foldMap attrStrip s
@@ -856,15 +860,19 @@ styled :: HasChars a => StyleReq -> Doc a -> Doc a
 styled _ Empty = Empty
 styled s x = Styled s x
 
+-- | Puts a 'Doc' in boldface.
 bold :: HasChars a => Doc a -> Doc a
 bold = styled (RWeight Bold)
 
+-- | Puts a 'Doc' in italics.
 italic :: HasChars a => Doc a -> Doc a
 italic = styled (RShape Italic)
 
+-- | Underlines a 'Doc'.
 underlined :: HasChars a => Doc a -> Doc a
 underlined = styled (RUnderline ULSingle)
 
+-- | Puts a line through a 'Doc'.
 strikeout :: HasChars a => Doc a -> Doc a
 strikeout = styled (RStrikeout Struck)
 
@@ -875,9 +883,11 @@ strikeout = styled (RStrikeout Struck)
 
 type Color = Color8
 
+-- | Set foreground color.
 fg :: HasChars a => Color -> Doc a -> Doc a
 fg = styled . RForeground . FG
 
+-- | Set background color.
 bg :: HasChars a => Color -> Doc a -> Doc a
 bg = styled . RBackground . BG
 
@@ -905,6 +915,7 @@ cyan = Cyan
 white :: Color
 white = White
 
+-- | Make Doc a hyperlink.
 link :: HasChars a => Text -> Doc a -> Doc a
 link = Linked
 
