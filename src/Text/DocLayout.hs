@@ -242,6 +242,7 @@ nestle d =
     Concat (Concat x y) z     -> nestle (Concat x (Concat y z))
     Concat BlankLines{} x     -> nestle x
     Concat NewLine x          -> nestle x
+    Concat CarriageReturn x   -> nestle x
     _                         -> d
 
 -- | Chomps trailing blank space off of a 'Doc'.
