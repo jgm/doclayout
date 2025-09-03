@@ -1,5 +1,9 @@
 # doclayout
 
+## 0.5.0.1
+
+  * Have `nestle` remove leading CarriageReturn.
+
 ## 0.5
 
   * Extract existing HasChars definition into a module
