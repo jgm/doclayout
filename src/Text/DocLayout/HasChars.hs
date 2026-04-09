@@ -9,6 +9,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import Data.Text (Text)
 import qualified Data.Text.Lazy.Builder as B
+import qualified Data.Foldable as F
 import Data.List (foldl', uncons)
 import Data.Maybe (fromMaybe)
 import Text.DocLayout.Attributed
@@ -74,8 +75,7 @@ instance (HasChars a) => HasChars (Attributed a) where
   foldlChar _ acc (Attributed S.Empty) = acc
   foldlChar f acc (Attributed ((Attr _ _ x) :<| xs)) =
     let l = foldlChar f acc x
-        innerFold e a = foldlChar f a e
-     in foldr innerFold l xs
+     in F.foldl' (\a (Attr _ _ e) -> foldlChar f a e) l xs
   splitLines (Attributed s) = fmap Attributed $ reverse $ go ([], S.empty) s
     where
       go (lns, cur) S.Empty = cur : lns
