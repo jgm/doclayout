@@ -320,14 +320,26 @@ flatten (Styled f x) = FStyleOpen f : flatten x <> [FStyleClose]
 type DocState a = State (RenderState a) ()
 
 data RenderState a = RenderState{
-         output     :: [Attr a]        -- ^ In reverse order
-       , prefix     :: Text
-       , usePrefix  :: Bool
-       , lineLength :: Maybe Int  -- ^ 'Nothing' means no wrapping
-       , column     :: Int
-       , newlines   :: Int        -- ^ Number of preceding newlines
-       , fontStack  :: [Font]
-       , linkTarget :: Maybe Text -- ^ Current link target
+         output          :: [Attr a]        -- ^ In reverse order
+       , prefix          :: Text
+       , prefixA         :: a          -- cached: fromString (T.unpack prefix)
+       , prefixTrimmedA  :: a          -- cached: fromString (T.unpack (T.dropWhileEnd isSpace prefix))
+       , prefixLen       :: !Int       -- cached: realLength prefix
+       , usePrefix       :: Bool
+       , lineLength      :: Maybe Int  -- ^ 'Nothing' means no wrapping
+       , column          :: Int
+       , newlines        :: Int        -- ^ Number of preceding newlines
+       , fontStack       :: [Font]
+       , linkTarget      :: Maybe Text -- ^ Current link target
+       }
+
+setPrefix :: HasChars a => Text -> RenderState a -> RenderState a
+setPrefix p st =
+  let pa = fromString $ T.unpack p
+  in st{ prefix = p
+       , prefixA = pa
+       , prefixTrimmedA = fromString $ T.unpack $ T.dropWhileEnd isSpace p
+       , prefixLen = realLength pa
        }
 
 peekFont :: RenderState a -> Font
@@ -338,9 +350,8 @@ peekFont st = case fontStack st of
 newline :: HasChars a => DocState a
 newline = do
   st' <- get
-  let rawpref = prefix st'
-  when (column st' == 0 && usePrefix st' && not (T.null rawpref)) $ do
-     let pref = fromString $ T.unpack $ T.dropWhileEnd isSpace rawpref
+  when (column st' == 0 && usePrefix st' && not (T.null (prefix st'))) $ do
+     let pref = prefixTrimmedA st'
      modify $ \st -> st{ output = Attr Nothing baseFont pref : output st
                        , column = column st + realLength pref }
   modify $ \st -> st { output = Attr Nothing baseFont "\n" : output st
@@ -351,11 +362,11 @@ newline = do
 outp :: HasChars a => Int -> a -> DocState a
 outp off s = do           -- offset >= 0 (0 might be combining char)
   st' <- get
-  let pref = if usePrefix st' then fromString $ T.unpack $ prefix st' else mempty
+  let pref = if usePrefix st' then prefixA st' else mempty
   let font = peekFont st'
   when (column st' == 0 && not (isNull pref && font == baseFont)) $
     modify $ \st -> st{ output = Attr Nothing baseFont pref : output st
-                    , column = column st + realLength pref }
+                    , column = column st + prefixLen st }
   modify $ \st -> st{ output = Attr (linkTarget st) font s : output st
                     , column = column st + off
                     , newlines = 0 }
@@ -397,6 +408,9 @@ prerender linelen doc = fromList . reverse . output $
    where startingState = RenderState{
                             output = mempty
                           , prefix = mempty
+                          , prefixA = mempty
+                          , prefixTrimmedA = mempty
+                          , prefixLen = 0
                           , usePrefix = True
                           , lineLength = linelen
                           , column = 0
@@ -459,11 +473,11 @@ renderList (FText off s : xs) = do
 
 renderList (FCookedText off s : xs) = do
   st' <- get
-  let pref = if usePrefix st' then fromString $ T.unpack $ prefix st' else mempty
+  let pref = if usePrefix st' then prefixA st' else mempty
   let elems (Attributed x) = reverse $ toList x
   when (column st' == 0 && not (isNull pref))  $
     modify $ \st -> st{ output = Attr Nothing baseFont pref : output st
-                      , column = column st + realLength pref }
+                      , column = column st + prefixLen st }
   modify $ \st -> st{ output = elems s ++ output st
                     , column = column st + off
                     , newlines = 0 }
@@ -508,10 +522,15 @@ renderList (FLinkClose : xs) = do
 renderList (FPrefixed pref d : xs) = do
   st <- get
   let oldPref = prefix st
-  put st{ prefix = prefix st <> pref }
+      oldPrefixA = prefixA st
+      oldPrefixTrimmedA = prefixTrimmedA st
+      oldPrefixLen = prefixLen st
+  put $! setPrefix (prefix st <> pref) st
   renderList $ normalize $ N.toList d
-  modify $ \s -> s{ prefix = oldPref }
-  -- renderDoc CarriageReturn
+  modify $ \s -> s{ prefix = oldPref
+                  , prefixA = oldPrefixA
+                  , prefixTrimmedA = oldPrefixTrimmedA
+                  , prefixLen = oldPrefixLen }
   renderList xs
 
 renderList (FFlush d : xs) = do
@@ -582,11 +601,21 @@ renderList (b : xs) = do
   let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
                              (map toBlockSpec bs)
   let oldPref = prefix st
-  case column st - realLength oldPref of
-        n | n > 0 -> modify $ \s -> s{ prefix = oldPref <> T.replicate n " " }
+      oldPrefixA = prefixA st
+      oldPrefixTrimmedA = prefixTrimmedA st
+      oldPrefixLen = prefixLen st
+  case column st - oldPrefixLen of
+        n | n > 0 -> modify $ \s ->
+              s{ prefix = oldPref <> T.replicate n " "
+               , prefixA = prefixA s <> replicateChar n ' '
+               , prefixLen = prefixLen s + n
+               }  -- prefixTrimmedA unchanged: trailing spaces are trimmed
         _ -> return ()
   renderList $ intersperse FCarriageReturn (mapMaybe (cook . snd) lns')
-  modify $ \s -> s{ prefix = oldPref }
+  modify $ \s -> s{ prefix = oldPref
+                  , prefixA = oldPrefixA
+                  , prefixTrimmedA = oldPrefixTrimmedA
+                  , prefixLen = oldPrefixLen }
   renderList rest
 
 isBreakable :: HasChars a => FlatDoc a -> Bool
