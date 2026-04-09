@@ -350,26 +350,30 @@ peekFont st = case fontStack st of
 newline :: HasChars a => DocState a
 newline = do
   st' <- get
-  when (column st' == 0 && usePrefix st' && not (T.null (prefix st'))) $ do
-     let pref = prefixTrimmedA st'
-     modify $ \st -> st{ output = Attr Nothing baseFont pref : output st
-                       , column = column st + realLength pref }
-  modify $ \st -> st { output = Attr Nothing baseFont "\n" : output st
-                     , column = 0
-                     , newlines = newlines st + 1
-                     }
+  let nl = Attr Nothing baseFont "\n"
+  put $! if column st' == 0 && usePrefix st' && not (T.null (prefix st'))
+    then let pref = prefixTrimmedA st'
+         in st'{ output = nl : Attr Nothing baseFont pref : output st'
+               , column = 0
+               , newlines = newlines st' + 1 }
+    else st'{ output = nl : output st'
+            , column = 0
+            , newlines = newlines st' + 1 }
 
 outp :: HasChars a => Int -> a -> DocState a
 outp off s = do           -- offset >= 0 (0 might be combining char)
   st' <- get
   let pref = if usePrefix st' then prefixA st' else mempty
-  let font = peekFont st'
-  when (column st' == 0 && not (isNull pref && font == baseFont)) $
-    modify $ \st -> st{ output = Attr Nothing baseFont pref : output st
-                    , column = column st + prefixLen st }
-  modify $ \st -> st{ output = Attr (linkTarget st) font s : output st
-                    , column = column st + off
-                    , newlines = 0 }
+      font = peekFont st'
+  put $! if column st' == 0 && not (isNull pref && font == baseFont)
+    then st'{ output = Attr (linkTarget st') font s
+                      : Attr Nothing baseFont pref
+                      : output st'
+            , column = prefixLen st' + off
+            , newlines = 0 }
+    else st'{ output = Attr (linkTarget st') font s : output st'
+            , column = column st' + off
+            , newlines = 0 }
 
 -- | Synonym for 'renderPlain'.
 render :: HasChars a => Maybe Int -> Doc a -> a
@@ -474,13 +478,14 @@ renderList (FText off s : xs) = do
 renderList (FCookedText off s : xs) = do
   st' <- get
   let pref = if usePrefix st' then prefixA st' else mempty
-  let elems (Attributed x) = reverse $ toList x
-  when (column st' == 0 && not (isNull pref))  $
-    modify $ \st -> st{ output = Attr Nothing baseFont pref : output st
-                      , column = column st + prefixLen st }
-  modify $ \st -> st{ output = elems s ++ output st
-                    , column = column st + off
-                    , newlines = 0 }
+      elems (Attributed x) = reverse $ toList x
+  put $! if column st' == 0 && not (isNull pref)
+    then st'{ output = elems s ++ (Attr Nothing baseFont pref : output st')
+            , column = prefixLen st' + off
+            , newlines = 0 }
+    else st'{ output = elems s ++ output st'
+            , column = column st' + off
+            , newlines = 0 }
   renderList xs
 
 -- FStyleOpen and FStyleClose are balanced by construction when we create
