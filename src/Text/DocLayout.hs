@@ -434,20 +434,21 @@ normalize (FBreakingSpace : FBlankLines n : xs) = normalize (FBlankLines n:xs)
 normalize (FBreakingSpace : FBreakingSpace : xs) = normalize (FBreakingSpace:xs)
 normalize (x:xs) = x : normalize xs
 
-mergeBlocks :: HasChars a => Int -> (Int, [a]) -> (Int, [a]) -> (Int, [a])
+mergeBlocks :: HasChars a => Int -> (Int, [(Int, a)]) -> (Int, [(Int, a)]) -> (Int, [(Int, a)])
 mergeBlocks h (w1,lns1) (w2,lns2) =
-  (w, zipWith (\l1 l2 -> pad w1 l1 <> l2) lns1' lns2')
+  (w, zipWith merge lns1' lns2')
  where
   w  = w1 + w2
   len1 = length $ take h lns1  -- note lns1 might be infinite
   len2 = length $ take h lns2
   lns1' = if len1 < h
-             then lns1 ++ replicate (h - len1) mempty
+             then lns1 ++ replicate (h - len1) (0, mempty)
              else take h lns1
   lns2' = if len2 < h
-             then lns2 ++ replicate (h - len2) mempty
+             then lns2 ++ replicate (h - len2) (0, mempty)
              else take h lns2
-  pad n s = s <> replicateChar (n - realLength s) ' '
+  merge (len1a, l1) (len2a, l2) = (w1 + len2a, pad w1 len1a l1 <> l2)
+  pad n len s = s <> replicateChar (n - len) ' '
 
 renderList :: HasChars a => [FlatDoc a] -> DocState a
 renderList [] = return ()
@@ -574,8 +575,9 @@ renderList (b : xs) = do
   let heightOf (FBlock _ ls) = length ls
       heightOf _            = 1
   let maxheight = maximum $ map heightOf (b:bs)
-  let toBlockSpec (FBlock w ls) = (w, ls)
-      toBlockSpec (FVFill w t)  = (w, map (singleton . (Attr (linkTarget st) font)) (take maxheight $ repeat t))
+  let toBlockSpec (FBlock w ls) = (w, map (\l -> (realLength l, l)) ls)
+      toBlockSpec (FVFill w t)  = (w, map (\l -> (realLength l, l)) $
+                                    map (singleton . (Attr (linkTarget st) font)) (take maxheight $ repeat t))
       toBlockSpec _            = (0, [])
   let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
                              (map toBlockSpec bs)
@@ -583,7 +585,7 @@ renderList (b : xs) = do
   case column st - realLength oldPref of
         n | n > 0 -> modify $ \s -> s{ prefix = oldPref <> T.replicate n " " }
         _ -> return ()
-  renderList $ intersperse FCarriageReturn (mapMaybe cook lns')
+  renderList $ intersperse FCarriageReturn (mapMaybe (cook . snd) lns')
   modify $ \s -> s{ prefix = oldPref }
   renderList rest
 
