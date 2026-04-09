@@ -961,7 +961,7 @@ realLengthWith f = extractLength . foldlChar f (MatchState True 0 ' ' 0)
 -- multilingual plane that do not have emoji in them.
 -- This works in a narrow context.
 updateMatchStateNarrow :: MatchState -> Char -> MatchState
-updateMatchStateNarrow (MatchState firstChar tot _ tentative) !c
+updateMatchStateNarrow (MatchState firstChar tot lastChar tentative) !c
     -- Control characters have width 0: friends don't let friends use tabs
     | c <= '\x001F'  = controlState
     -- ASCII
@@ -1062,12 +1062,44 @@ updateMatchStateNarrow (MatchState firstChar tot _ tentative) !c
            | c == '\x0BCD' -> combiningState  -- Vowel markers
            | c <= '\x0BCC' -> narrowState     -- Main Tamil abugida
            | otherwise     -> narrowState     -- Tamil digits and others
+    -- Thai
+    | c >= '\x0E00' && c <= '\x0E7F' =
+        if | c == '\x0E31' -> combiningState  -- Mai han akat
+           | c >= '\x0E34' && c <= '\x0E3A' -> combiningState  -- Vowels and tone marks
+           | c >= '\x0E47' && c <= '\x0E4E' -> combiningState  -- Mai tai ku and other marks
+           | otherwise     -> narrowState     -- Thai consonants, vowels, digits, symbols
+    -- Zero-width joiner: joins two emoji together
+    | c == '\x200D' =
+        let isLastCharEmojiLike = isJust (IM.lookup (ord lastChar) emojiMap)
+                                  || lastChar == '\xFE0F'
+                                  || isSkinToneModifier lastChar
+         in if isLastCharEmojiLike
+            then MatchState False (tot - 2) c 2
+            else controlState
+    -- Emoji presentation variation selector
+    | c == '\xFE0F' =
+        case IM.lookup (ord lastChar) emojiMap of
+          Just (EmojiInfo True _) -> MatchState False tot c 2
+          _                       -> controlState
+    -- CJK Compatibility Ideographs
+    | c >= '\xF900' && c <= '\xFAFF'  = wideState
+    -- Fullwidth forms
+    | c >= '\xFF01' && c <= '\xFF60'  = wideState
+    | c >= '\xFFE0' && c <= '\xFFE6'  = wideState
+    -- Supplementary CJK: Extension B and beyond
+    | c >= '\x20000' && c <= '\x3FFFF' = wideState
+    -- Emoji skin tone modifiers
+    | c >= '\x1F3FB' && c <= '\x1F3FF' =
+        case IM.lookup (ord lastChar) emojiMap of
+          Just (EmojiInfo _ True) -> MatchState False tot c 2
+          _                       -> wideState
   where
-    narrowState    = MatchState False (tot + tentative) c 1
-    wideState      = MatchState False (tot + tentative) c 2
-    combiningState = let w = if firstChar then 1 else 0 in MatchState False (tot + tentative) c w
-    controlState   = MatchState False (tot + tentative) c 0
-    ambiguousState = MatchState False (tot + tentative) c 1
+    tot'           = tot + tentative
+    narrowState    = MatchState False tot' c 1
+    wideState      = MatchState False tot' c 2
+    combiningState = let w = if firstChar then 1 else 0 in MatchState False tot' c w
+    controlState   = MatchState False tot' c 0
+    ambiguousState = MatchState False tot' c 1
 updateMatchStateNarrow s c = updateMatchStateNoShortcut s c
 
 -- | Update a 'MatchState' by processing a character.
@@ -1075,7 +1107,7 @@ updateMatchStateNarrow s c = updateMatchStateNoShortcut s c
 -- multilingual plane that do not have emoji in them.
 -- This works in a wide context.
 updateMatchStateWide :: MatchState -> Char -> MatchState
-updateMatchStateWide (MatchState firstChar tot _ tentative) !c
+updateMatchStateWide (MatchState firstChar tot lastChar tentative) !c
     -- Control characters have width 0: friends don't let friends use tabs
     | c <= '\x001F'  = controlState
     -- ASCII
@@ -1163,12 +1195,44 @@ updateMatchStateWide (MatchState firstChar tot _ tentative) !c
            | c == '\x0BCD' -> combiningState  -- Vowel markers
            | c <= '\x0BCC' -> narrowState     -- Main Tamil abugida
            | otherwise     -> narrowState     -- Tamil digits and others
+    -- Thai
+    | c >= '\x0E00' && c <= '\x0E7F' =
+        if | c == '\x0E31' -> combiningState  -- Mai han akat
+           | c >= '\x0E34' && c <= '\x0E3A' -> combiningState  -- Vowels and tone marks
+           | c >= '\x0E47' && c <= '\x0E4E' -> combiningState  -- Mai tai ku and other marks
+           | otherwise     -> narrowState     -- Thai consonants, vowels, digits, symbols
+    -- Zero-width joiner: joins two emoji together
+    | c == '\x200D' =
+        let isLastCharEmojiLike = isJust (IM.lookup (ord lastChar) emojiMap)
+                                  || lastChar == '\xFE0F'
+                                  || isSkinToneModifier lastChar
+         in if isLastCharEmojiLike
+            then MatchState False (tot - 2) c 2
+            else controlState
+    -- Emoji presentation variation selector
+    | c == '\xFE0F' =
+        case IM.lookup (ord lastChar) emojiMap of
+          Just (EmojiInfo True _) -> MatchState False tot c 2
+          _                       -> controlState
+    -- CJK Compatibility Ideographs
+    | c >= '\xF900' && c <= '\xFAFF'  = wideState
+    -- Fullwidth forms
+    | c >= '\xFF01' && c <= '\xFF60'  = wideState
+    | c >= '\xFFE0' && c <= '\xFFE6'  = wideState
+    -- Supplementary CJK: Extension B and beyond
+    | c >= '\x20000' && c <= '\x3FFFF' = wideState
+    -- Emoji skin tone modifiers
+    | c >= '\x1F3FB' && c <= '\x1F3FF' =
+        case IM.lookup (ord lastChar) emojiMap of
+          Just (EmojiInfo _ True) -> MatchState False tot c 2
+          _                       -> wideState
   where
-    narrowState    = MatchState False (tot + tentative) c 1
-    wideState      = MatchState False (tot + tentative) c 2
-    combiningState = let w = if firstChar then 1 else 0 in MatchState False (tot + tentative) c w
-    controlState   = MatchState False (tot + tentative) c 0
-    ambiguousState = MatchState False (tot + tentative) c 2
+    tot'           = tot + tentative
+    narrowState    = MatchState False tot' c 1
+    wideState      = MatchState False tot' c 2
+    combiningState = let w = if firstChar then 1 else 0 in MatchState False tot' c w
+    controlState   = MatchState False tot' c 0
+    ambiguousState = MatchState False tot' c 2
 updateMatchStateWide s c = updateMatchStateNoShortcutWide s c
 
 -- | Update a 'MatchState' by processing a character, without taking any
