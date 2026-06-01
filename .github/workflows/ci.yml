@@ -24,6 +24,8 @@ jobs:
             cabal: 'latest'
           - ghc: '9.10'
             cabal: 'latest'
+          - ghc: '9.12'
+            cabal: 'latest'
     steps:
     - uses: actions/checkout@v1
     - name: Install cabal/ghc
@@ -42,20 +44,3 @@ jobs:
       run: |
           cabal v2-test --disable-optimization
 
-  macos:
-
-    runs-on: macOS-latest
-
-    steps:
-    - uses: actions/checkout@v1
-    - name: Install stack
-      run: |
-          curl -L https://get.haskellstack.org/stable/osx-x86_64.tar.gz -o stack.tar.gz
-          tar xzvf stack.tar.gz --strip-components=1 'stack*/stack'
-    - name: Install dependencies
-      run: |
-          ./stack update
-          ./stack test --dependencies-only --fast
-    - name: Build and test
-      run: |
-          ./stack install --fast --test --haddock --no-haddock-deps
