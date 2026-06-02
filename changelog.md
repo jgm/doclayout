@@ -1,5 +1,10 @@
 # doclayout
 
+## 0.5.0.3
+
+  * Tests: Go back to using withMaxSuccess for compatibility with older
+    QuickCheck versions.
+
 ## 0.5.0.2
 
   * Performance optimizations:
