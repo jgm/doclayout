@@ -759,47 +759,51 @@ afterBreak = AfterBreak
 
 -- | Returns the width of a 'Doc'.
 offset :: (IsString a, HasChars a) => Doc a -> Int
-offset = uncurry max . getOffset (const False) (0, 0)
+offset = uncurry max . getOffset (const False) 0 (0, 0)
 
 -- | Returns the minimal width of a 'Doc' when reflowed at breakable spaces.
 minOffset :: HasChars a => Doc a -> Int
-minOffset = uncurry max . getOffset (> 0) (0,0)
+minOffset = uncurry max . getOffset (> 0) 0 (0,0)
 
--- l = longest, c = current
+-- l = longest, c = current; pfx = width of the current line prefix,
+-- to which the column returns after a line break.
 getOffset :: (IsString a, HasChars a)
-          => (Int -> Bool) -> (Int, Int) -> Doc a -> (Int, Int)
-getOffset breakWhen (!l, !c) x =
+          => (Int -> Bool) -> Int -> (Int, Int) -> Doc a -> (Int, Int)
+getOffset breakWhen !pfx (!l, !c) x =
   case x of
     Text n _ -> (l, c + n)
     Block n _ -> (l, c + n)
     VFill n _ -> (l, c + n)
     CookedText n _ -> (l, c + n)
     Empty -> (l, c)
-    Styled _ d -> getOffset breakWhen (l, c) d
-    Linked _ d -> getOffset breakWhen (l, c) d
-    CarriageReturn -> (max l c, 0)
-    NewLine -> (max l c, 0)
-    BlankLines _ -> (max l c, 0)
+    Styled _ d -> getOffset breakWhen pfx (l, c) d
+    Linked _ d -> getOffset breakWhen pfx (l, c) d
+    CarriageReturn -> (max l c, pfx)
+    NewLine -> (max l c, pfx)
+    BlankLines _ -> (max l c, pfx)
     Prefixed t d ->
-      let (l',c') = getOffset breakWhen (0, 0) d
-       in (max l (l' + realLength t), c' + realLength t)
+      -- The renderer only emits prefixes at the start of a line;
+      -- mid-line, the first line continues at the current column.
+      let pfx' = pfx + realLength t
+          c' = if c <= pfx then pfx' else c
+       in getOffset breakWhen pfx' (l, c') d
     BeforeNonBlank _ -> (l, c)
-    Flush d -> getOffset breakWhen (l, c) d
+    Flush d -> getOffset breakWhen 0 (l, c) d  -- flush disables the prefix
     BreakingSpace
-      | breakWhen c -> (max l c, 0)
+      | breakWhen c -> (max l c, pfx)
       | otherwise -> (l, c + 1)
-    AfterBreak t -> if c == 0
+    AfterBreak t -> if c == pfx
                        then (l, c + realLength t)
                        else (l, c)
     Concat (Concat d y) z ->
-      getOffset breakWhen (l, c) (Concat d (Concat y z))
+      getOffset breakWhen pfx (l, c) (Concat d (Concat y z))
     Concat (BeforeNonBlank d) y ->
       if isNonBlank y
-         then getOffset breakWhen (l, c) (Concat d y)
-         else getOffset breakWhen (l, c) y
+         then getOffset breakWhen pfx (l, c) (Concat d y)
+         else getOffset breakWhen pfx (l, c) y
     Concat d y ->
-      let (l', c') = getOffset breakWhen (l, c) d
-       in getOffset breakWhen (l', c') y
+      let (l', c') = getOffset breakWhen pfx (l, c) d
+       in getOffset breakWhen pfx (l', c') y
 
 isNonBlank :: Doc a -> Bool
 isNonBlank (Text _ _) = True
@@ -811,7 +815,7 @@ isNonBlank _ = False
 -- | Returns the column that would be occupied by the last
 -- laid out character (assuming no wrapping).
 updateColumn :: HasChars a => Doc a -> Int -> Int
-updateColumn d k = snd . getOffset (const False) (0,k) $ d
+updateColumn d k = snd . getOffset (const False) 0 (0,k) $ d
 
 -- | @lblock n d@ is a block of width @n@ characters, with
 -- text derived from @d@ and aligned to the left.

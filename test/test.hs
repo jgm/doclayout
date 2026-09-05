@@ -33,6 +33,12 @@ tests =
       (offset (nest 3 (text "**" <> text "thisIsGoingToBeTooLongAnyway" <>
                        text "**") <> blankline :: Doc Text) @?= 35)
 
+  , testCase "offset with mid-line prefixed" $
+      offset ("hello" <> nest 2 "world" :: Doc Text) @?= 10
+
+  , testCase "offset with prefixed continuation lines" $
+      offset ("aa" <> nest 2 ("bb" <> cr <> "cc") :: Doc Text) @?= 4
+
   , renderTest "lblock with chop"
       Nothing
       (lblock 4 (text "hi there" :: Doc Text))
