@@ -10,6 +10,7 @@ import Test.Tasty.QuickCheck
 import Data.Functor ((<&>))
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
 #if MIN_VERSION_base(4,11,0)
 #else
 import Data.Semigroup
@@ -36,6 +37,21 @@ tests =
       Nothing
       (lblock 4 (text "hi there" :: Doc Text))
       "hi t\nhere"
+
+  , renderTest "chop fills lines from the left"
+      Nothing
+      (lblock 3 (text "abcdefg" :: Doc Text))
+      "abc\ndef\ng"
+
+  , renderTest "chop keeps combining chars with their base"
+      Nothing
+      (lblock 2 (text "ab\770cd" :: Doc Text))
+      "ab\770\ncd"
+
+  , testCase "chop preserves styling" $
+      assertBool "bold escape code survives chopping" $
+        "\ESC[1m" `TL.isInfixOf`
+          renderANSI Nothing (lblock 4 (bold (text "hi there")) :: Doc Text)
 
   , renderTest "lblock with blank line"
       Nothing
@@ -80,7 +96,7 @@ tests =
  , renderTest "simple box wrapping"
      (Just 50)
      (lblock 3 "aa" <> lblock 3 "bb" <> lblock 3 ("aa" <+> "bbbb"))
-     "aa bb aa\n      b\n      bbb"
+     "aa bb aa\n      bbb\n      b"
 
  , renderTest "prefixed with multi paragraphs"
      (Just 80)

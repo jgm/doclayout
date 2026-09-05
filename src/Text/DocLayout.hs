@@ -845,7 +845,11 @@ block filler width d
 vfill :: HasChars a => a -> Doc a
 vfill t = VFill (realLength t) t
 
-chop :: HasChars a => Int -> a -> [a]
+-- Split lines longer than n at width n, filling lines left to right.
+-- Attributes are preserved: each Attr is split into as few pieces as
+-- possible.  Width-0 characters (combining marks) never start a new
+-- line, so they stay with their base character.
+chop :: HasChars a => Int -> Attributed a -> [Attributed a]
 chop n =
    concatMap chopLine . removeFinalEmpty . map addRealLength . splitLines
  where
@@ -853,20 +857,26 @@ chop n =
                            Just (0, _) -> initSafe xs
                            _           -> xs
    addRealLength l = (realLength l, l)
-   chopLine (len, l)
+   chopLine (len, l@(Attributed attrs))
      | len <= n  = [l]
-     | otherwise = map snd $
-                    foldrChar
-                     (\c ls ->
-                       let clen = charWidth c
-                           cs = replicateChar 1 c
-                        in case ls of
-                             (len', l'):rest
-                               | len' + clen > n ->
-                                   (clen, cs):(len', l'):rest
-                               | otherwise ->
-                                   (len' + clen, cs <> l'):rest
-                             [] -> [(clen, cs)]) [] l
+     | otherwise =
+         let (_, cur, lns) = foldl' goAttr (0, [], []) (toList attrs)
+          in reverse (fromList (reverse cur) : lns)
+   -- State: (width of current line, reversed Attrs of current line,
+   -- reversed list of completed lines).  Within an Attr, characters
+   -- are accumulated in reverse in pend and flushed into a single
+   -- Attr on line breaks and at the end of the Attr.
+   goAttr (w0, cur0, lns0) (Attr lk f x) =
+     let (w, cur, lns, pend) = foldlChar (goChar lk f) (w0, cur0, lns0, []) x
+      in (w, addPend lk f pend cur, lns)
+   goChar lk f (w, cur, lns, pend) c =
+     let cw = charWidth c
+      in if w + cw > n && w > 0
+            then (cw, [], fromList (reverse (addPend lk f pend cur)) : lns,
+                  [c])
+            else (w + cw, cur, lns, c : pend)
+   addPend _ _ [] cur    = cur
+   addPend lk f pend cur = Attr lk f (fromString (reverse pend)) : cur
 
 -- | Encloses a 'Doc' inside a start and end 'Doc'.
 inside :: Doc a -> Doc a -> Doc a -> Doc a
