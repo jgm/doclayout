@@ -1285,13 +1285,21 @@ updateMatchStateWide s c = updateMatchStateNoShortcutWide s c
 -- shortcuts. This should give the same answer as 'updateMatchStateNarrow', but will
 -- be slower. It is here to test that the shortcuts are implemented correctly.
 updateMatchStateNoShortcut :: MatchState -> Char -> MatchState
-updateMatchStateNoShortcut match c = resolveWidth match c $ unicodeWidth (unicodeRangeMap Narrow) c
+updateMatchStateNoShortcut match c = resolveWidth match c $ unicodeWidth narrowUnicodeMap c
 
 -- | Update a 'MatchState' by processing a character, without taking any
 -- shortcuts. This should give the same answer as 'updateMatchStateWide', but will
 -- be slower. It is here to test that the shortcuts are implemented correctly.
 updateMatchStateNoShortcutWide :: MatchState -> Char -> MatchState
-updateMatchStateNoShortcutWide match c = resolveWidth match c $ unicodeWidth (unicodeRangeMap Wide) c
+updateMatchStateNoShortcutWide match c = resolveWidth match c $ unicodeWidth wideUnicodeMap c
+
+-- | Width table resolving ambiguous characters as narrow.
+narrowUnicodeMap :: UnicodeMap
+narrowUnicodeMap = unicodeRangeMap Narrow
+
+-- | Width table resolving ambiguous characters as wide.
+wideUnicodeMap :: UnicodeMap
+wideUnicodeMap = unicodeRangeMap Wide
 
 -- | Update a match state given a character and its class
 resolveWidth :: MatchState -> Char -> UnicodeWidth -> MatchState
