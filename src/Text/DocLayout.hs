@@ -1023,10 +1023,7 @@ updateMatchStateNarrow (MatchState firstChar tot lastChar tentative) !c
     -- Combining diacritical marks used in Latin and other scripts
     | c <= '\x036F'  = combiningState
     -- Han ideographs
-    | c >= '\x3250' && c <= '\xA4CF' =
-        if | c <= '\x4DBF' -> wideState       -- Han ideographs
-           | c <= '\x4DFF' -> narrowState     -- Hexagrams
-           | otherwise     -> wideState       -- More Han ideographs
+    | c >= '\x3250' && c <= '\xA4CF' = wideState
     -- Arabic
     | c >= '\x0600' && c <= '\x06FF' =
         if | c <= '\x0605' -> controlState    -- Number marks
@@ -1158,10 +1155,7 @@ updateMatchStateWide (MatchState firstChar tot lastChar tentative) !c
     -- ASCII
     | c <= '\x007E'  = narrowState
     -- Han ideographs
-    | c >= '\x3250' && c <= '\xA4CF' =
-        if | c <= '\x4DBF' -> wideState       -- Han ideographs
-           | c <= '\x4DFF' -> narrowState     -- Hexagrams
-           | otherwise     -> wideState       -- More Han ideographs
+    | c >= '\x3250' && c <= '\xA4CF' = wideState
     -- Japanese
     | c >= '\x2E80' && c <= '\x324F' =
         if | c <= '\x3029' -> wideState       -- Punctuation and others
