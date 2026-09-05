@@ -379,14 +379,14 @@ render = renderPlain
 renderANSI :: HasChars a => Maybe Int -> Doc a -> TL.Text
 renderANSI n d = B.toLazyText $ go $ prerender n d where
   go s = (\(_,_,o) -> o) (go' s) <> B.fromText (renderFont baseFont) <> B.fromText (renderOSC8 Nothing)
-  go' (Attributed s) = foldl attrRender (Nothing, baseFont, B.fromText "") s
+  go' (Attributed s) = foldl' attrRender (Nothing, baseFont, B.fromText "") s
 
 -- | Render a 'Doc' without using ANSI escapes.  @renderPlain (Just n)@ will use
 -- a line length of @n@ to reflow text on breakable spaces.
 -- @renderPlain Nothing@ will not reflow text.
 renderPlain :: HasChars a => Maybe Int -> Doc a -> a
 renderPlain n d = go $ prerender n d where
-  go (Attributed s) = foldMap attrStrip s
+  go (Attributed s) = mconcat $ map attrStrip $ toList s
 
 attrStrip :: HasChars a => Attr a -> a
 attrStrip (Attr _ _ y) | isNull y = ""
@@ -498,9 +498,6 @@ renderList (FStyleClose : xs) = do
 
 -- Nested links are nonsensical, we only handle the outermost and
 -- silently ignore any attempts to have a link inside a link
-
--- Nested links are nonsensical, we only handle the outermost and
--- silently ignore any attempts to have a link inside a link
 renderList (FLinkOpen target : xs) = do
   st <- get
   case linkTarget st of
@@ -594,10 +591,11 @@ renderList (b : xs) = do
       heightOf _            = 1
   let maxheight = maximum $ map heightOf (b:bs)
   let toBlockSpec (FBlock w ls) = (w, map (\l -> (realLength l, l)) ls)
-      toBlockSpec (FVFill w t)  = (w, map (\l -> (realLength l, l)) $
-                                    map (singleton . (Attr (linkTarget st) font)) (take maxheight $ repeat t))
+      toBlockSpec (FVFill w t)  = (w, replicate maxheight
+                                    (realLength t,
+                                     singleton (Attr (linkTarget st) font t)))
       toBlockSpec _            = (0, [])
-  let (_, lns') = foldl (mergeBlocks maxheight) (toBlockSpec b)
+  let (_, lns') = foldl' (mergeBlocks maxheight) (toBlockSpec b)
                              (map toBlockSpec bs)
   let oldPref = prefix st
       oldPrefixA = prefixA st
@@ -1070,9 +1068,7 @@ updateMatchStateNarrow (MatchState firstChar tot lastChar tentative) !c
            | c <= '\x09C4' -> combiningState  -- Combining signs
            | c == '\x09CD' -> combiningState  -- Combining signs
            | c <= '\x09E1' -> narrowState     -- Bengali
-           | c <= '\x09E3' -> combiningState  -- Combining marks
-           | c == '\x09E2' -> combiningState  -- Bengali vocalic vowel signs
-           | c == '\x09E3' -> combiningState  -- Bengali vocalic vowel signs
+           | c <= '\x09E3' -> combiningState  -- Bengali vocalic vowel signs
            | c <= '\x09FD' -> narrowState     -- Bengali digits and other symbols
            | otherwise     -> combiningState  -- Bengali sandhi mark, plus a few symbols from Gurmukhi
     -- Cyrillic (plus Greek and Armenian for free)
@@ -1220,9 +1216,7 @@ updateMatchStateWide (MatchState firstChar tot lastChar tentative) !c
            | c <= '\x09C4' -> combiningState  -- Combining signs
            | c == '\x09CD' -> combiningState  -- Combining signs
            | c <= '\x09E1' -> narrowState     -- Bengali
-           | c <= '\x09E3' -> combiningState  -- Combining marks
-           | c == '\x09E2' -> combiningState  -- Bengali vocalic vowel signs
-           | c == '\x09E3' -> combiningState  -- Bengali vocalic vowel signs
+           | c <= '\x09E3' -> combiningState  -- Bengali vocalic vowel signs
            | c <= '\x09FD' -> narrowState     -- Bengali digits and other symbols
            | otherwise     -> combiningState  -- Bengali sandhi mark, plus a few symbols from Gurmukhi
     -- Telugu (plus one character of Kannada)
