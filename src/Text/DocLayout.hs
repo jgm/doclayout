@@ -748,9 +748,15 @@ beforeNonBlank = BeforeNonBlank
 
 -- | Makes a 'Doc' non-reflowable.
 nowrap :: IsString a => Doc a -> Doc a
-nowrap = mconcat . map replaceSpace . unfoldD
-  where replaceSpace BreakingSpace = Text 1 $ fromString " "
-        replaceSpace x             = x
+nowrap = go
+  where go BreakingSpace      = Text 1 $ fromString " "
+        go (Concat x y)       = Concat (go x) (go y)
+        go (Styled s d)       = Styled s (go d)
+        go (Linked l d)       = Linked l (go d)
+        go (Prefixed p d)     = Prefixed p (go d)
+        go (BeforeNonBlank d) = BeforeNonBlank (go d)
+        go (Flush d)          = Flush (go d)
+        go x                  = x
 
 -- | Content to print only if it comes at the beginning of a line,
 -- to be used e.g. for escaping line-initial `.` in roff man.

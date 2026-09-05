@@ -287,6 +287,16 @@ tests =
       (literal "a" <> cr <> literal "\nb" <> cr <> literal "c")
       "a\n\nb\nc"
 
+  , renderTest "nowrap inside styled text"
+      (Just 4)
+      (nowrap (bold ("aa" <> space <> "bb")))
+      "aa bb"
+
+  , renderTest "nowrap around prefixed"
+      (Just 4)
+      (nowrap (prefixed "> " ("aa" <> space <> "bb")))
+      "> aa bb"
+
   , renderTest "breaking within styled text"
       (Just 5)
       ("hi" <+> (fg blue ("mom" <+> "and" <+> "dad")))
