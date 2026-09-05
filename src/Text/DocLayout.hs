@@ -281,31 +281,35 @@ data FlatDoc a = FText Int a
 --   * Other Docs with inner content are eliminated if the inner content is
 --     empty, otherwise the inner content is itself flattened and made into
 --     a NonEmpty.
+-- The accumulator ("rest") style guarantees linear time even for
+-- left-nested Concats; naive list appends would be quadratic.
 flatten :: HasChars a => Doc a -> [FlatDoc a]
-flatten (Text n a) = [FText n a]
-flatten (Block n a) = [FBlock n a]
-flatten (VFill n a) = [FVFill n a]
-flatten (CookedText n a) = [FCookedText n a]
-flatten (Prefixed p d) | null f = []
-                       | otherwise = [FPrefixed p (N.fromList f)]
-                       where f = flatten d
-flatten (BeforeNonBlank d) | null f = []
-                           | otherwise = [FBeforeNonBlank (N.fromList f)]
-                           where f = flatten d
-flatten (Flush d) | null f = []
-                  | otherwise = [FFlush (N.fromList f)]
-                  where f = flatten d
-flatten BreakingSpace = [FBreakingSpace]
-flatten CarriageReturn = [FCarriageReturn]
-flatten (AfterBreak t) | null f = []
-                       | otherwise = [FAfterBreak (N.fromList f)]
-                       where f = flatten $ fromString $ T.unpack t
-flatten NewLine = [FNewLine]
-flatten (BlankLines n) = [FBlankLines n]
-flatten Empty = []
-flatten (Concat x y) = flatten x <> flatten y
-flatten (Linked l x) = FLinkOpen l : flatten x <> [FLinkClose]
-flatten (Styled f x) = FStyleOpen f : flatten x <> [FStyleClose]
+flatten d = go d []
+  where
+    go (Text n a) rest = FText n a : rest
+    go (Block n a) rest = FBlock n a : rest
+    go (VFill n a) rest = FVFill n a : rest
+    go (CookedText n a) rest = FCookedText n a : rest
+    go (Prefixed p x) rest = case go x [] of
+                               [] -> rest
+                               f  -> FPrefixed p (N.fromList f) : rest
+    go (BeforeNonBlank x) rest = case go x [] of
+                                   [] -> rest
+                                   f  -> FBeforeNonBlank (N.fromList f) : rest
+    go (Flush x) rest = case go x [] of
+                          [] -> rest
+                          f  -> FFlush (N.fromList f) : rest
+    go BreakingSpace rest = FBreakingSpace : rest
+    go CarriageReturn rest = FCarriageReturn : rest
+    go (AfterBreak t) rest = case go (fromString (T.unpack t)) [] of
+                               [] -> rest
+                               f  -> FAfterBreak (N.fromList f) : rest
+    go NewLine rest = FNewLine : rest
+    go (BlankLines n) rest = FBlankLines n : rest
+    go Empty rest = rest
+    go (Concat x y) rest = go x (go y rest)
+    go (Linked l x) rest = FLinkOpen l : go x (FLinkClose : rest)
+    go (Styled f x) rest = FStyleOpen f : go x (FStyleClose : rest)
 
 type DocState a = State (RenderState a) ()
 
