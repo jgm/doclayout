@@ -105,7 +105,7 @@ module Text.DocLayout (
 
 where
 import Prelude
-import Data.Maybe (fromMaybe, isJust, mapMaybe)
+import Data.Maybe (isJust, mapMaybe)
 import Safe (lastMay, initSafe)
 import Control.Monad
 import Control.Monad.State.Strict
@@ -624,11 +624,10 @@ isBreakable FNewLine            = True
 isBreakable (FBlankLines _)     = True
 isBreakable _                  = False
 
+-- Whether the first character is a space.  foldrChar is lazy in its
+-- accumulator, so this inspects only the first character.
 startsBlank' :: HasChars a => a -> Bool
-startsBlank' t = fromMaybe False $ foldlChar go Nothing t
-  where
-   go Nothing  c = Just (isSpace c)
-   go (Just b) _ = Just b
+startsBlank' = foldrChar (\c _ -> isSpace c) False
 
 startsBlank :: HasChars a => FlatDoc a -> Bool
 startsBlank (FText _ t)                = startsBlank' t
