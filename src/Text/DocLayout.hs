@@ -97,8 +97,6 @@ module Text.DocLayout (
      , isSkinToneModifier
      , isEmojiVariation
      , isZWJ
-     -- * Utility functions
-     , unfoldD
      -- * Types
      , Doc(..)
      , HasChars(..)
@@ -173,14 +171,6 @@ instance Monoid (Doc a) where
 
 instance HasChars a => IsString (Doc a) where
   fromString = text
-
-{-# DEPRECATED unfoldD "unfoldD will be removed from the API." #-}
--- | Unfold a 'Doc' into a flat list.
-unfoldD :: Doc a -> [Doc a]
-unfoldD Empty = []
-unfoldD (Concat x@Concat{} y) = unfoldD x <> unfoldD y
-unfoldD (Concat x y)          = x : unfoldD y
-unfoldD x                     = [x]
 
 -- | True if the document is empty.
 isEmpty :: Doc a -> Bool
