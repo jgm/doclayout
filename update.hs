@@ -1,5 +1,7 @@
-#!/usr/bin/env stack
--- stack --resolver lts-18.10 script --package megaparsec --package bytestring --package pretty-show --package pretty --package text
+#!/usr/bin/env cabal
+{- cabal:
+build-depends: base, megaparsec, bytestring, pretty-show, pretty, text
+-}
 {-# LANGUAGE OverloadedStrings #-}
 import qualified Data.ByteString.Lazy as B
 import Data.Char (chr)
@@ -67,7 +69,9 @@ unicodeSpecP = fmap concat . many $ choice
 unicodeP :: Parser Unicode
 unicodeP = do
     range <- rangeP
+    _ <- space
     char ';'
+    _ <- space
     width <- widthP
     _ <- space
     _ <- string "# "
