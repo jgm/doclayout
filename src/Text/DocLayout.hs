@@ -118,7 +118,7 @@ import qualified Data.List.NonEmpty as N
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Map.Strict as M
 import qualified Data.Map.Internal as MInt
-import Data.Data (Data, Typeable)
+import Data.Data (Data)
 import Data.Foldable (toList)
 import Data.String
 import qualified Data.Text as T
@@ -157,7 +157,7 @@ data Doc a = Text Int a            -- ^ Text with specified width.
          | Linked Text (Doc a)       -- ^ A hyperlink
          | Empty
          deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
-                  Data, Typeable, Generic)
+                  Data, Generic)
 
 
 instance Semigroup (Doc a) where
@@ -271,7 +271,7 @@ data FlatDoc a = FText Int a
                | FLinkOpen Text
                | FLinkClose
          deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
-                  Data, Typeable, Generic)
+                  Data, Generic)
 
 -- Given a Doc, return an equivalent list of FlatDocs, to be processed by
 -- renderList. Worth noting:

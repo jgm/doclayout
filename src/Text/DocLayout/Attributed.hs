@@ -7,7 +7,7 @@ module Text.DocLayout.Attributed (Attributed(..), Attr(..), Link, fromList, sing
 
 import Data.String
 import Text.DocLayout.ANSIFont (Font, baseFont)
-import Data.Data (Data, Typeable)
+import Data.Data (Data)
 import GHC.Generics
 import Data.Sequence ((><))
 import qualified Data.Sequence as S
@@ -17,8 +17,7 @@ type Link = Maybe Text
 
 -- | Font attributes.
 data Attr a = Attr Link Font a
-  deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
-    Data, Typeable, Generic)
+  deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable, Data, Generic)
 
 instance Semigroup a => Semigroup (Attr a) where
   (<>) (Attr l f x) (Attr _ _ y) = Attr l f $ x <> y  -- This is arbitrary
@@ -28,8 +27,7 @@ instance (IsString a, Monoid a) => Monoid (Attr a) where
 
 -- | A sequence of strings with font attributes.
 newtype Attributed a = Attributed (S.Seq (Attr a))
-  deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable,
-         Data, Typeable, Generic)
+  deriving (Show, Read, Eq, Ord, Functor, Foldable, Traversable, Data, Generic)
 
 fromList :: [Attr a] -> Attributed a
 fromList = Attributed . S.fromList
