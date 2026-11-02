@@ -10,7 +10,11 @@ import qualified Data.Text.Lazy as TL
 import Data.Text (Text)
 import qualified Data.Text.Lazy.Builder as B
 import qualified Data.Foldable as F
+#if MIN_VERSION_base(4,20,0)
+import Data.List (uncons)
+#else
 import Data.List (foldl', uncons)
+#endif
 import Data.Maybe (fromMaybe)
 import Text.DocLayout.Attributed
 import Data.Sequence (Seq(..), (|>))

@@ -112,7 +112,11 @@ import Control.Monad.State.Strict
 import GHC.Generics
 import Data.Bifunctor (second)
 import Data.Char (isSpace, ord)
+#if MIN_VERSION_base(4,20,0)
+import Data.List (intersperse)
+#else
 import Data.List (foldl', intersperse)
+#endif
 import Data.List.NonEmpty (NonEmpty((:|)))
 import qualified Data.List.NonEmpty as N
 import qualified Data.IntMap.Strict as IM
